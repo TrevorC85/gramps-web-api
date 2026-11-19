@@ -1,5 +1,5 @@
 #!/bin/bash
-# DRAFT (not deployed): switch the Gramps Web image of the stack, or roll back.
+# Switch the Gramps Web image of the stack, or roll back.
 #
 #   switch-image.sh use <tag> <tarball> <sha256> <image-id>
 #       <tarball>: docker save | gzip of the image, an s3://... URI (the stack's bucket) or

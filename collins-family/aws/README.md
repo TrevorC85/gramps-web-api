@@ -25,7 +25,7 @@ Internet ──80/443──► Lightsail static IP ──► Lightsail instance 
 | `gramps-env.sh` | Run before every start: writes `/run/gramps-web/compose.env` (RAM only, mode 600) and blocks containers from the instance metadata service |
 | `backup-s3.sh` | Nightly backup: pauses app + worker, tars `data/`, restarts, checks the archive, replaces `backups/latest.tgz`, deletes the seed once a backup exists |
 | `restore-s3.sh` | Restore `latest`, `seed`, or any `s3://…tgz` |
-| `switch-image.sh` | DRAFT: switch to our own image from a checked tarball, or roll back (`update.sh image ...`) |
+| `switch-image.sh` | Switch to our own image from a checked tarball, or roll back (`update.sh image ...`) |
 | `update.sh` | Backup, fetch the pinned commit (or a new SHA/branch/tag given as argument), verify it, re-run bootstrap (restarts the stack) |
 | `systemd/` | `gramps-web.service`, `gramps-backup.service`, `gramps-backup.timer` |
 | `samconfig.toml.example` | Example deploy settings (copy to the git-ignored `samconfig.toml`) |
@@ -204,7 +204,7 @@ Data lives on the instance's disk; the bucket's `latest.tgz` is the way back.
 - **OS packages:** `sudo dnf upgrade --releasever=latest -y && sudo reboot`.
 - **Template/launch script:** the launch script runs only on the first boot; edits to it only affect a rebuilt server.
 
-## Our own image (DRAFT, not deployed)
+## Our own image (tree link lines)
 
 The tree link lines (relation colour, confidence width, up to four parents) need our forks of
 the API and the frontend, so they ship as our own image `grampsweb-collins:26.11.2-<backend7>-<frontend7>`
@@ -217,8 +217,9 @@ registry; the server loads it from a checked tarball in the stack's bucket.
    docker save grampsweb-collins:26.11.2-xxxxxxx-yyyyyyy | gzip > img.tgz
    sha256sum img.tgz                                               # note the sum
    docker image inspect --format '{{.Id}}' grampsweb-collins:26.11.2-xxxxxxx-yyyyyyy
-   aws s3 cp img.tgz s3://<bucket>/images/grampsweb-collins-xxxxxxx-yyyyyyy.tgz
    ```
+   Upload it from the PC as in "Bucket transfers from the PC" below, to
+   `s3://<bucket>/images/grampsweb-collins-26.11.2-xxxxxxx-yyyyyyy.tgz`.
 2. On the server, after pushing the deploy commit that contains `switch-image.sh` and updating to it:
    ```
    sudo /opt/gramps-web/collins-family/aws/update.sh image use \
@@ -233,7 +234,40 @@ registry; the server loads it from a checked tarball in the stack's bucket.
 4. `update.sh image status` shows the current and previous image.
 
 The upload patch mount stays: our image contains the identical `file.py`, and the official image
-needs it after a rollback. Rehearsed locally on a copy (see `../image/README.md`), never on AWS.
+needs it after a rollback. Rehearsed locally on a copy (see `../image/README.md`).
+Step-by-step release with checks: `RUNBOOK-release-image.md`.
+
+**Rebuilt server:** our image is not in a registry, so leave `GrampsWebImage` empty in
+`samconfig.toml` (a new server starts on the official image) and run `update.sh image use …`
+again on the new server. A non-empty `GrampsWebImage` on a new server makes compose try to pull
+it from Docker Hub and the site does not start.
+
+## Bucket transfers from the PC
+
+The bucket is a Lightsail bucket. The server reaches it through resource access (no keys).
+From the PC, two ways work:
+
+- **Your `collins` login** (`aws s3 cp ... --profile collins --region us-west-2`), when that
+  login has S3 rights on the bucket (it does today: `aws s3api list-objects-v2 --bucket <bucket>`).
+  Always pass `--region us-west-2` (or set `$env:AWS_REGION`); without it the CLI may use another
+  region and fail with a redirect or "bucket not found".
+- **A temporary bucket access key**, when the login has no S3 rights or for an upload you want
+  scoped to this bucket only. Create it, use it in the same PowerShell session without printing
+  it, and delete it right after (a bucket can have at most two keys):
+  ```powershell
+  $bucket = "<BackupBucketName>"
+  $k = (aws lightsail create-bucket-access-key --bucket-name $bucket --output json | ConvertFrom-Json).accessKey
+  $env:AWS_ACCESS_KEY_ID = $k.accessKeyId; $env:AWS_SECRET_ACCESS_KEY = $k.secretAccessKey
+  Remove-Item Env:AWS_PROFILE -ErrorAction SilentlyContinue
+  aws s3 cp <file> "s3://$bucket/<key>" --region us-west-2      # or the other way round to download
+  Remove-Item Env:AWS_ACCESS_KEY_ID, Env:AWS_SECRET_ACCESS_KEY; $env:AWS_PROFILE = "collins"
+  aws lightsail delete-bucket-access-key --bucket-name $bucket --access-key-id $k.accessKeyId
+  aws lightsail get-bucket-access-keys --bucket-name $bucket   # must list none
+  $k = $null
+  ```
+  A new key can take a few seconds before S3 accepts it; retry the copy once if it is refused.
+
+Downloads (`backups/latest.tgz`) work the same way in the other direction.
 
 ## Teardown
 

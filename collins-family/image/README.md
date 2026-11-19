@@ -1,4 +1,4 @@
-# Our Gramps Web image (tree link lines) — local only, not deployed
+# Our Gramps Web image (tree link lines)
 
 `Dockerfile` builds Gramps Web 26.11.2 with our two forks:
 
@@ -27,10 +27,10 @@ Only committed code goes in (`git archive`). Tag: `grampsweb-collins:26.11.2-<be
 labels `org.collins.backend-sha` / `org.collins.frontend-sha`. Needs the classic builder
 (`DOCKER_BUILDKIT=0` is set) and network access for npm, pip and apt.
 
-## Ship (draft, needs approval)
+## Ship
 
 See "Our own image" in `../aws/README.md`: `docker save | gzip`, sha256 and image ID, upload to
-the stack bucket, `update.sh image use …`, `update.sh image rollback`.
+the stack bucket, `update.sh image use …`, `update.sh image rollback`; step by step in `../aws/RUNBOOK-release-image.md`. Releases so far: `RELEASES.md`.
 
 ## Local rehearsal
 

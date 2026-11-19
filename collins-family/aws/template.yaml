@@ -92,7 +92,7 @@ Parameters:
     Default: ""
     AllowedPattern: "^$|^[A-Za-z0-9._/:@-]+$"
     Description: >-
-      DRAFT. Gramps Web image for the first boot. Empty = the official 26.11.2 image pinned in
+      Gramps Web image for the first boot; keep it empty. Empty = the official 26.11.2 image pinned in
       docker-compose.aws.yml. Our own image is not in a registry: switch to it after the first
       boot with update.sh image use (it loads a checked tarball from the stack's bucket).
   SeedObjectKey:

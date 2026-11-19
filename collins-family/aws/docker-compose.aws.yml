@@ -22,7 +22,7 @@ x-grampsweb: &grampsweb
   # 26.11.2 is the image the local site runs (gramps-webapi 3.25.2). The digest is the
   # multi-arch index (amd64 sha256:467f6553... + arm64), checked on ghcr.io 18 Nov 2026;
   # the local x86_64 site runs exactly this index digest.
-  # DRAFT: GRAMPSWEB_IMAGE (from /etc/gramps-web/env via gramps-env.sh) selects our own
+  # GRAMPSWEB_IMAGE (from /etc/gramps-web/env via gramps-env.sh) selects our own
   # image, e.g. grampsweb-collins:26.11.2-<backend7>-<frontend7> loaded by switch-image.sh.
   # Unset = the official image below.
   image: ${GRAMPSWEB_IMAGE:-ghcr.io/gramps-project/grampsweb:26.11.2@sha256:80a1d75ca0f67f9203aecca60f7639312a2769fe0af45b34608b0add64f7c07f}

@@ -1,5 +1,5 @@
 #!/bin/bash
-# DRAFT: local rehearsal of switching the site to our own image and back, with a backup and
+# Local rehearsal of switching the site to our own image and back, with a backup and
 # a restore drill. Runs a COPY of the local site's data on 127.0.0.1:5059 (valkey 6383);
 # the local site (5055), its data and AWS are not touched. Uses aws/switch-image.sh exactly
 # as the server would, with local BACKUP/RESTART commands and its default health check pointed at 5059.
