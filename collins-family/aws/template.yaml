@@ -84,7 +84,9 @@ Parameters:
     Type: String
     Default: collins-family
     AllowedPattern: "^[A-Za-z0-9._/-]+$"
-    Description: Branch or tag to clone (a tag gives a reproducible deploy).
+    Description: >-
+      Git ref to deploy: a branch, a tag, or a full 40-character commit SHA. A commit SHA pins the
+      deploy exactly; the server refuses to start if the checked-out commit differs.
   SeedObjectKey:
     Type: String
     Default: seed/gramps-seed.tgz
@@ -161,10 +163,21 @@ Resources:
           for i in 1 2 3 4 5 6 7 8 9 10; do dnf install -y git && break; echo "dnf retry $i"; sleep 15; done
           if [ ! -d /opt/gramps-web/.git ]; then
             for i in 1 2 3 4 5 6 7 8 9 10; do
-              git clone --depth 1 --branch '${RepoBranch}' '${RepoUrl}' /opt/gramps-web && break
-              rm -rf /opt/gramps-web; echo "clone retry $i"; sleep 20
+              rm -rf /opt/gramps-web
+              git init -q /opt/gramps-web \
+                && git -C /opt/gramps-web remote add origin '${RepoUrl}' \
+                && git -C /opt/gramps-web fetch -q --depth 1 origin '${RepoBranch}' \
+                && git -C /opt/gramps-web checkout -q FETCH_HEAD && break
+              echo "clone retry $i"; sleep 20
             done
           fi
+          pin='${RepoBranch}'
+          case "$pin" in
+            *[!0-9a-f]*) ;;
+            *) if [ "$(printf %s "$pin" | wc -c)" -eq 40 ] && [ "$(git -C /opt/gramps-web rev-parse HEAD 2>/dev/null)" != "$pin" ]; then
+                 echo "FATAL: checked-out commit does not match pinned $pin; the site is NOT started"; exit 1; fi ;;
+          esac
+          echo "deploying commit $(git -C /opt/gramps-web rev-parse HEAD) (ref $pin)"
           /bin/bash /opt/gramps-web/collins-family/aws/bootstrap.sh
         } >> /var/log/gramps-bootstrap.log 2>&1
 

@@ -30,7 +30,7 @@ parameter_overrides = [
   "SshAccess=lightsail-connect",
   # "SshCidr=203.0.113.4/32",             # optional extra SSH source
   "RepoUrl=https://github.com/TrevorC85/gramps-web-api.git",
-  "RepoBranch=collins-family",
+  "RepoBranch=<40-character commit SHA>", # pin: git rev-parse origin/collins-family after pushing
   "SeedObjectKey=seed/gramps-seed.tgz",
   "SeedWaitMinutes=180",
 ]

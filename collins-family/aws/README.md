@@ -25,7 +25,7 @@ Internet ──80/443──► Lightsail static IP ──► Lightsail instance 
 | `gramps-env.sh` | Run before every start: writes `/run/gramps-web/compose.env` (RAM only, mode 600) and blocks containers from the instance metadata service |
 | `backup-s3.sh` | Nightly backup: pauses app + worker, tars `data/`, restarts, checks the archive, replaces `backups/latest.tgz`, deletes the seed once a backup exists |
 | `restore-s3.sh` | Restore `latest`, `seed`, or any `s3://…tgz` |
-| `update.sh` | Backup, pull the branch, re-run bootstrap (restarts the stack) |
+| `update.sh` | Backup, fetch the pinned commit (or a new SHA/branch/tag given as argument), verify it, re-run bootstrap (restarts the stack) |
 | `systemd/` | `gramps-web.service`, `gramps-backup.service`, `gramps-backup.timer` |
 | `samconfig.toml.example` | Example deploy settings (copy to the git-ignored `samconfig.toml`) |
 
@@ -79,8 +79,12 @@ Tools: AWS CLI 2.41.1, SAM CLI 1.173.0, profile `collins` (`aws login --profile 
 
 ### 0. Push and check the login
 
-The server clones the `collins-family` branch of `https://github.com/TrevorC85/gramps-web-api`
-on first boot, so push this folder first. Then:
+The server fetches `https://github.com/TrevorC85/gramps-web-api` on first boot, so push this
+folder first. **Pin the deploy to a commit:** set `RepoBranch` in `samconfig.toml` to the full
+40-character SHA of the pushed commit (`git rev-parse HEAD` in the clone after `git push`). The
+server fetches exactly that commit and refuses to start (`FATAL` in the bootstrap log) if the
+checked-out commit differs. A branch name also works but deploys whatever the branch holds at
+boot time. Then:
 
 ```powershell
 $env:AWS_PROFILE = "collins"; $env:AWS_REGION = "us-west-2"
@@ -189,7 +193,10 @@ Data lives on the instance's disk; the bucket's `latest.tgz` is the way back.
 ## Update
 
 - **Config / scripts / patch / pinned images** (after pushing to the branch):
-  `sudo /opt/gramps-web/collins-family/aws/update.sh` — backup, pull, re-run bootstrap.
+  `sudo /opt/gramps-web/collins-family/aws/update.sh <new 40-character commit SHA>` — backup,
+  fetch exactly that commit (refuses if it doesn't match), save it as `REPO_BRANCH` in
+  `/etc/gramps-web/env`, re-run bootstrap. Without an argument it re-fetches the deployed ref.
+  Also put the new SHA in `samconfig.toml` so a rebuilt server uses the same commit.
 - **Newer Gramps Web image:** the upload patch replaces `gramps_webapi/api/file.py` in the image;
   compare the new image's file with `../patches/file.py.upstream` first (see `../patches/README.md`),
   then update tag **and** digest in `docker-compose.aws.yml`.
