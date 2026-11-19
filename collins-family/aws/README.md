@@ -216,11 +216,12 @@ registry; the server loads it from a checked tarball in the stack's bucket.
    collins-family/image/build.sh <backend-sha> <frontend-sha>        # prints the tag
    docker save grampsweb-collins:26.11.2-xxxxxxx-yyyyyyy | gzip > img.tgz
    sha256sum img.tgz                                               # note the sum
-   docker image inspect --format '{{.Id}}' grampsweb-collins:26.11.2-xxxxxxx-yyyyyyy
+   tar -xzOf img.tgz manifest.json        # "Config": blobs/sha256/<config digest> = the image ID to pass
    ```
    Upload it from the PC as in "Bucket transfers from the PC" below, to
    `s3://<bucket>/images/grampsweb-collins-26.11.2-xxxxxxx-yyyyyyy.tgz`.
-2. On the server, after pushing the deploy commit that contains `switch-image.sh` and updating to it:
+2. On the server, after pushing the deploy commit that contains `switch-image.sh` and checking it out
+   (see `RUNBOOK-release-image.md` step 4):
    ```
    sudo /opt/gramps-web/collins-family/aws/update.sh image use \
      grampsweb-collins:26.11.2-xxxxxxx-yyyyyyy s3://<bucket>/images/grampsweb-collins-xxxxxxx-yyyyyyy.tgz <sha256> <image-id>
