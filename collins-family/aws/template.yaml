@@ -15,7 +15,7 @@ Metadata:
       - Label: {default: Server}
         Parameters: [AvailabilityZoneLetter, BundleId, BlueprintId, InstanceGeneration, SshAccess, SshCidr]
       - Label: {default: Code and data}
-        Parameters: [RepoUrl, RepoBranch, SeedObjectKey, SeedWaitMinutes]
+        Parameters: [RepoUrl, RepoBranch, GrampsWebImage, SeedObjectKey, SeedWaitMinutes]
 
 Parameters:
   DomainName:
@@ -87,6 +87,14 @@ Parameters:
     Description: >-
       Git ref to deploy: a branch, a tag, or a full 40-character commit SHA. A commit SHA pins the
       deploy exactly; the server refuses to start if the checked-out commit differs.
+  GrampsWebImage:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^[A-Za-z0-9._/:@-]+$"
+    Description: >-
+      DRAFT. Gramps Web image for the first boot. Empty = the official 26.11.2 image pinned in
+      docker-compose.aws.yml. Our own image is not in a registry: switch to it after the first
+      boot with update.sh image use (it loads a checked tarball from the stack's bucket).
   SeedObjectKey:
     Type: String
     Default: seed/gramps-seed.tgz
@@ -153,6 +161,7 @@ Resources:
         SEED_WAIT_MINUTES='${SeedWaitMinutes}'
         REPO_URL='${RepoUrl}'
         REPO_BRANCH='${RepoBranch}'
+        GRAMPSWEB_IMAGE='${GrampsWebImage}'
         REPO_DIR='/opt/gramps-web'
         DATA_ROOT='/srv/gramps'
         SECRET_FILE='/etc/gramps-web/secret-key'

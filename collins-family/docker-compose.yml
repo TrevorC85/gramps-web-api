@@ -14,7 +14,8 @@
 
 services:
   grampsweb: &grampsweb
-    image: ghcr.io/gramps-project/grampsweb:26.11.2@sha256:80a1d75ca0f67f9203aecca60f7639312a2769fe0af45b34608b0add64f7c07f
+    # DRAFT: GRAMPSWEB_IMAGE in .env selects our own image (see image/README.md); unset = official
+    image: ${GRAMPSWEB_IMAGE:-ghcr.io/gramps-project/grampsweb:26.11.2@sha256:80a1d75ca0f67f9203aecca60f7639312a2769fe0af45b34608b0add64f7c07f}
     container_name: grampsweb
     restart: unless-stopped
     network_mode: host

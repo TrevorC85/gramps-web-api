@@ -40,5 +40,7 @@ tmp=$(mktemp /run/gramps-web/compose.env.XXXXXX)
   printf 'GRAMPS_DATA_DIR=%s\n' "$DATA_ROOT/data"
   printf 'CADDY_DATA_DIR=%s\n' "$DATA_ROOT/caddy"
   printf 'GRAMPSWEB_SECRET_KEY=%s\n' "$(cat "$SECRET_FILE")"
+  # DRAFT: our own image, switched by switch-image.sh (empty = official image)
+  if [ -n "${GRAMPSWEB_IMAGE:-}" ]; then printf 'GRAMPSWEB_IMAGE=%s\n' "$GRAMPSWEB_IMAGE"; fi
 } > "$tmp"
 mv -f "$tmp" /run/gramps-web/compose.env

@@ -7,6 +7,13 @@
 # A 40-character SHA pins the deploy: the checked-out commit must match it exactly, or
 # nothing is changed. The new ref is saved as REPO_BRANCH in /etc/gramps-web/env.
 set -euo pipefail
+# DRAFT: image switches are separate from code updates (see switch-image.sh):
+#   update.sh image use <tag> <s3://bucket/images/x.tgz> <sha256> <image-id>
+#   update.sh image rollback | status
+if [ "${1:-}" = "image" ]; then
+  shift
+  exec "$(dirname "$0")/switch-image.sh" "$@"
+fi
 ENV_FILE="${GRAMPS_ENV_FILE:-/etc/gramps-web/env}"
 # shellcheck source=/dev/null
 . "$ENV_FILE"

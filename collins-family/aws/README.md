@@ -25,6 +25,7 @@ Internet ──80/443──► Lightsail static IP ──► Lightsail instance 
 | `gramps-env.sh` | Run before every start: writes `/run/gramps-web/compose.env` (RAM only, mode 600) and blocks containers from the instance metadata service |
 | `backup-s3.sh` | Nightly backup: pauses app + worker, tars `data/`, restarts, checks the archive, replaces `backups/latest.tgz`, deletes the seed once a backup exists |
 | `restore-s3.sh` | Restore `latest`, `seed`, or any `s3://…tgz` |
+| `switch-image.sh` | DRAFT: switch to our own image from a checked tarball, or roll back (`update.sh image ...`) |
 | `update.sh` | Backup, fetch the pinned commit (or a new SHA/branch/tag given as argument), verify it, re-run bootstrap (restarts the stack) |
 | `systemd/` | `gramps-web.service`, `gramps-backup.service`, `gramps-backup.timer` |
 | `samconfig.toml.example` | Example deploy settings (copy to the git-ignored `samconfig.toml`) |
@@ -202,6 +203,37 @@ Data lives on the instance's disk; the bucket's `latest.tgz` is the way back.
   then update tag **and** digest in `docker-compose.aws.yml`.
 - **OS packages:** `sudo dnf upgrade --releasever=latest -y && sudo reboot`.
 - **Template/launch script:** the launch script runs only on the first boot; edits to it only affect a rebuilt server.
+
+## Our own image (DRAFT, not deployed)
+
+The tree link lines (relation colour, confidence width, up to four parents) need our forks of
+the API and the frontend, so they ship as our own image `grampsweb-collins:26.11.2-<backend7>-<frontend7>`
+built by `../image/build.sh` from two committed SHAs (see `../image/README.md`). It is not in any
+registry; the server loads it from a checked tarball in the stack's bucket.
+
+1. On the build machine (not the server; the build needs ~6 GB and 10-15 minutes):
+   ```
+   collins-family/image/build.sh <backend-sha> <frontend-sha>        # prints the tag
+   docker save grampsweb-collins:26.11.2-xxxxxxx-yyyyyyy | gzip > img.tgz
+   sha256sum img.tgz                                               # note the sum
+   docker image inspect --format '{{.Id}}' grampsweb-collins:26.11.2-xxxxxxx-yyyyyyy
+   aws s3 cp img.tgz s3://<bucket>/images/grampsweb-collins-xxxxxxx-yyyyyyy.tgz
+   ```
+2. On the server, after pushing the deploy commit that contains `switch-image.sh` and updating to it:
+   ```
+   sudo /opt/gramps-web/collins-family/aws/update.sh image use \
+     grampsweb-collins:26.11.2-xxxxxxx-yyyyyyy s3://<bucket>/images/grampsweb-collins-xxxxxxx-yyyyyyy.tgz <sha256> <image-id>
+   ```
+   It refuses a tarball whose sha256 or image ID differs, takes a backup (`backup-s3.sh`),
+   records the previous image as `PREV_GRAMPSWEB_IMAGE` in `/etc/gramps-web/env`, restarts and
+   waits for the API; if the site does not come up it switches back by itself.
+3. Roll back at any time: `sudo .../update.sh image rollback` (official 26.11.2 image, or whatever
+   ran before). No data restore is needed: the database and user-DB migrations are the same as
+   26.11.2. To also undo data changes made since, restore the backup taken in step 2 (see Restore).
+4. `update.sh image status` shows the current and previous image.
+
+The upload patch mount stays: our image contains the identical `file.py`, and the official image
+needs it after a rollback. Rehearsed locally on a copy (see `../image/README.md`), never on AWS.
 
 ## Teardown
 
