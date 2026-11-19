@@ -198,6 +198,11 @@ class RestrictedDb(DbReadBase):
             self.__redaction = compute_redaction(self.__db)
         return self.__redaction
 
+    def living_stub_handles(self) -> frozenset[str]:
+        """Handles of the living people shown as first-name stubs (if any)."""
+        living = self.__living()
+        return living.people if living is not None else frozenset()
+
     def is_visible(self, class_name: str, handle: Optional[str]) -> bool:
         """Whether the object with this handle exists and is visible."""
         living = self.__living()

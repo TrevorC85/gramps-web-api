@@ -31,13 +31,17 @@ from gramps.gen.errors import HandleError
 from gramps.gen.lib.primaryobj import BasicPrimaryObject as GrampsObject
 from gramps.gen.utils.grampslocale import GrampsLocale
 from marshmallow import Schema
+from unidecode import unidecode
 from webargs import fields, validate
 
 from ...auth.const import PERM_TRIGGER_REINDEX, PERM_VIEW_PRIVATE
 from ...const import PRIMARY_GRAMPS_OBJECTS
 from ..auth import has_permissions, require_permissions
 from ..blueprint import api_blueprint
+from ..access import RestrictedDb
 from ..search import get_search_indexer
+from ..search.query import parse_query
+from ..search.text import tokenize
 from ..tasks import (
     AsyncResult,
     make_task_response,
@@ -231,6 +235,19 @@ class SearchResource(GrampsJSONEncoder, ProtectedResource):
             change_value = None
 
         locale = get_locale_for_language(args["locale"], default=True)
+        db_handle = self.db_handle
+        if isinstance(db_handle, RestrictedDb) and db_handle.policy.redacts_living:
+            total, hits = _search_with_living_stubs(
+                searcher, db_handle, args, change_op, change_value, locale
+            )
+            for hit in hits:
+                hit["object"] = self.get_object_from_handle(
+                    handle=hit["handle"],
+                    class_name=hit["object_type"],
+                    args=args,
+                    locale=locale,
+                )
+            return self.response(200, payload=hits, args=args, total_items=total)
         total, hits = searcher.search(
             query=args["query"],
             page=args["page"],
@@ -257,6 +274,92 @@ class SearchResource(GrampsJSONEncoder, ProtectedResource):
             # filter out hits without object (i.e. if handle failed)
             hits = [hit for hit in hits if "object" in hit]
         return self.response(200, payload=hits or [], args=args, total_items=total)
+
+
+# Collins family fork: search for users who see living people as first-name
+# stubs (LIVING_FIRST_NAME_ONLY). Stubs are private in the search index, so
+# they are matched here on the given name shown, and only on that. All index
+# hits are read and the hidden ones dropped before paging, so that the total
+# counts only what is returned.
+
+_OBJECT_CLASS = {name.lower(): name for name in PRIMARY_GRAMPS_OBJECTS}
+_CHANGE_OPS = {
+    "<": lambda a, b: a < b,
+    "<=": lambda a, b: a <= b,
+    ">": lambda a, b: a > b,
+    ">=": lambda a, b: a >= b,
+}
+
+
+def stub_matches(query: Optional[str], given_name: str) -> bool:
+    """Whether a search query matches a stub's given name, like the index
+    would (all clauses, any term per clause, whole tokens unless prefix)."""
+    if not query or query.strip() == "*":
+        return True
+    clauses = parse_query(query)
+    if not clauses:
+        return False
+    variants = [tokenize(given_name), tokenize(unidecode(given_name))]
+
+    def term_matches(term, tokens) -> bool:
+        size = len(term.tokens)
+        for start in range(len(tokens) - size + 1):
+            window = tokens[start : start + size]
+            if list(window[:-1]) != list(term.tokens[:-1]):
+                continue
+            last, wanted = window[-1], term.tokens[-1]
+            if last == wanted or (term.prefix and last.startswith(wanted)):
+                return True
+        return False
+
+    return all(
+        any(term_matches(term, tokens) for term in clause for tokens in variants)
+        for clause in clauses
+    )
+
+
+def _search_with_living_stubs(searcher, db_handle, args, change_op, change_value, locale):
+    """Return (total, page of hits) for a restricted user who sees stubs."""
+    common = {
+        "query": args["query"],
+        "include_private": False,
+        "sort": args.get("sort"),
+        "object_types": args.get("type") or None,
+        "change_op": change_op,
+        "change_value": change_value,
+        "locale": locale,
+    }
+    count, _ = searcher.search(page=1, pagesize=1, **common)
+    raw = searcher.search(page=1, pagesize=count, **common)[1] if count else []
+    hits = [
+        hit
+        for hit in raw
+        if hit["object_type"] in _OBJECT_CLASS
+        and db_handle.is_visible(_OBJECT_CLASS[hit["object_type"]], hit["handle"])
+    ]
+    stubs = []
+    types = args.get("type") or None
+    if types is None or "person" in types:
+        top = max((hit.get("score") or 0 for hit in hits), default=1.0) or 1.0
+        for handle in sorted(db_handle.living_stub_handles()):
+            person = db_handle.get_person_from_handle(handle)
+            if person is None:
+                continue
+            if change_op and not _CHANGE_OPS[change_op](0.0, change_value):
+                continue
+            if stub_matches(args["query"], person.primary_name.get_first_name()):
+                stubs.append({"handle": handle, "object_type": "person", "score": top})
+    sort = [key for key in (args.get("sort") or []) if key.lstrip("+-") == "change"]
+    if sort and not sort[0].startswith("-"):
+        # stubs have no change date (0): oldest first
+        merged = stubs + hits
+    elif sort:
+        merged = hits + stubs
+    else:
+        # direct name matches first, like the best index hits
+        merged = stubs + hits
+    start = (args["page"] - 1) * args["pagesize"]
+    return len(merged), merged[start : start + args["pagesize"]]
 
 
 class SearchIndexQueryArgs(Schema):

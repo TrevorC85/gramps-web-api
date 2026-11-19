@@ -21,7 +21,8 @@ Families with a living parent are shown (private ones as stubs), so the tree
 stays connected, but without their events, notes, citations, media,
 attributes, tags or relationship type. Child references of living children,
 and every child reference in a family with a living parent, lose their notes
-and citations; living children's relation to their parents becomes Unknown.
+and citations; living children's relation to their parents becomes the custom
+relation type "Hidden".
 
 Notes, events, citations and media reachable from what is removed are hidden
 as primary objects too, also if something else visible refers to them, so
@@ -49,7 +50,9 @@ from .sanitize import JsonValue, RawData, as_handle, as_list, as_object
 DEATH_EVENT_TYPES = frozenset({13, 19, 24})  # death, burial, cremation
 ROLE_PRIMARY = 1
 GENDER_UNKNOWN = 2
-CHILD_REF_UNKNOWN = 6
+CHILD_REF_CUSTOM = 7
+# relation shown for a living child's links to its parents
+HIDDEN_RELATION = "Hidden"
 FAMILY_REL_UNKNOWN = 3
 NAME_FORMAT_GIVEN = 4  # Name.FN
 
@@ -267,9 +270,13 @@ def strip_child_refs(
         if child_living or all_refs:
             ref = dict(ref, note_list=[], citation_list=[])
             if child_living:
-                unknown = {"_class": "ChildRefType", "value": CHILD_REF_UNKNOWN, "string": ""}
-                ref["frel"] = dict(unknown)
-                ref["mrel"] = dict(unknown)
+                hidden = {
+                    "_class": "ChildRefType",
+                    "value": CHILD_REF_CUSTOM,
+                    "string": HIDDEN_RELATION,
+                }
+                ref["frel"] = dict(hidden)
+                ref["mrel"] = dict(hidden)
             changed = True
         refs.append(ref)
     if not changed:

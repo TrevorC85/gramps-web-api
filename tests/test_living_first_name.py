@@ -216,7 +216,11 @@ def test_families(tree):
     (cref,) = fam.get_child_ref_list()
     assert cref.ref == h["living"]
     assert cref.get_note_list() == [] and cref.get_citation_list() == []
-    assert cref.get_father_relation() == ChildRefType.UNKNOWN
+    # a living child's own relation to its parents is shown as "Hidden"
+    for rel in (cref.get_father_relation(), cref.get_mother_relation()):
+        assert rel == ChildRefType.CUSTOM
+        assert rel.string == "Hidden"
+        assert str(rel) == "Hidden"
     own = rdb.get_family_from_handle(h["own"])
     assert own is not None
     assert own.get_father_handle() == h["living"]
@@ -228,6 +232,8 @@ def test_member_unchanged(tree):
     rdb = RestrictedDb(db, MEMBER)
     person = rdb.get_person_from_handle(h["living"])
     assert person.primary_name.get_surname() == "Livingname"
+    (cref,) = rdb.get_family_from_handle(h["fam"]).get_child_ref_list()
+    assert cref.get_father_relation() == ChildRefType.ADOPTED
     assert person.get_note_list() == [h["public_note"]]
     assert rdb.get_note_from_handle(h["cref_note"]) is not None
 
@@ -238,3 +244,90 @@ def test_sorted_handles_fallback(tree):
     assert rdb.get_sorted_handles("Person", [("surname", False)]) is None
     assert RestrictedDb(db, GUEST).policy.cache_key() == "00"
     assert rdb.policy.cache_key() == "01"
+
+
+def test_stub_matches():
+    from gramps_webapi.api.resources.search import stub_matches
+
+    assert stub_matches("Michael", "Michael")
+    assert stub_matches("michael", "Michael")
+    assert stub_matches("Mich*", "Michael")
+    assert not stub_matches("Mich", "Michael")  # whole tokens unless prefix
+    assert stub_matches("Ann", "Mary Ann")
+    assert stub_matches("Mary Ann", "Mary Ann")
+    assert not stub_matches("Mary Smith", "Mary Ann")  # all clauses must match
+    assert stub_matches("Jose", "José")
+    assert stub_matches("", "Michael") and stub_matches("*", "Michael")
+    assert not stub_matches("Hidden", "Michael")
+
+
+def _search(rdb, indexer, query, page=1, pagesize=100, types=None, sort=None):
+    from gramps_webapi.api.resources.search import _search_with_living_stubs
+
+    args = {"query": query, "page": page, "pagesize": pagesize,
+            "type": types, "sort": sort}
+    return _search_with_living_stubs(indexer, rdb, args, None, None, None)
+
+
+@pytest.fixture()
+def indexed(tree, tmp_path):
+    import uuid
+
+    from gramps_webapi.api.search.indexer import SearchIndexer
+
+    db, h = tree
+    indexer = SearchIndexer(
+        tree=f"test-{uuid.uuid4().hex}", db_url=f"sqlite:///{tmp_path}/search.db"
+    )
+    indexer.reindex_full(db)
+    yield db, h, indexer
+    indexer._delete_all()
+
+
+def test_search_living_by_first_name(indexed):
+    db, h, indexer = indexed
+    rdb = RestrictedDb(db, GUEST_FIRST_NAMES)
+    total, hits = _search(rdb, indexer, "Michael")
+    assert total == 1 and [hit["handle"] for hit in hits] == [h["living"]]
+    assert hits[0]["object_type"] == "person"
+    total, hits = _search(rdb, indexer, "Mich*")
+    assert total == 1 and hits[0]["handle"] == h["living"]
+    # restricted to people
+    assert _search(rdb, indexer, "Michael", types=["person"])[0] == 1
+    assert _search(rdb, indexer, "Michael", types=["note"])[0] == 0
+
+
+def test_search_nothing_hidden(indexed):
+    db, h, indexer = indexed
+    rdb = RestrictedDb(db, GUEST_FIRST_NAMES)
+    # nickname, other given names in the field, surname, notes, source title,
+    # child reference note, occupation: none of these find anything hidden
+    for query in ("Mike", "Mick", "Livingname", "court", "certificate", "job"):
+        total, hits = _search(rdb, indexer, query)
+        assert total == len(hits) == 0, query
+    # "living" is in hidden notes and the hidden source title, and in the
+    # visible family note: only the visible note is found and counted
+    total, hits = _search(rdb, indexer, "living")
+    assert [hit["handle"] for hit in hits] == [h["fam_note"]]
+    assert total == 1
+
+
+def test_search_totals_and_paging(indexed):
+    db, h, indexer = indexed
+    rdb = RestrictedDb(db, GUEST_FIRST_NAMES)
+    total, everything = _search(rdb, indexer, "*")
+    handles = [hit["handle"] for hit in everything]
+    assert total == len(handles) == len(set(handles))
+    assert h["living"] in handles
+    for hidden in ("public_note", "cref_note", "source", "citation", "media",
+                   "marriage", "dead_private"):
+        assert h[hidden] not in handles, hidden
+    paged = []
+    for page in range(1, total + 2):
+        page_total, hits = _search(rdb, indexer, "*", page=page, pagesize=2)
+        assert page_total == total
+        paged += [hit["handle"] for hit in hits]
+    assert paged == handles
+    # public people are still found as before
+    total, hits = _search(rdb, indexer, "Albert")
+    assert h["dad"] in [hit["handle"] for hit in hits] and total == len(hits)
