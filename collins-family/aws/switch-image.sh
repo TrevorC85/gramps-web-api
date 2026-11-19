@@ -87,9 +87,10 @@ case "${1:-}" in
     valid_ref "$tag" || { log "invalid tag"; exit 2; }
     case "$sum" in *[!0-9a-f]*|"") log "invalid sha256"; exit 2 ;; esac
     [ "${#sum}" -eq 64 ] || { log "invalid sha256"; exit 2; }
-    tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+    # On disk, not /tmp (tmpfs in RAM on the server); about 0.5 GB
+    tmp=$(mktemp -d -p "${IMAGE_TMP_DIR:-/var/tmp}"); trap 'rm -rf "$tmp"' EXIT
     case "$tarball" in
-      s3://*) aws s3 cp --only-show-errors "$tarball" "$tmp/image.tgz" ;;
+      s3://*) aws s3 cp --only-show-errors --region "${AWS_REGION:-us-west-2}" "$tarball" "$tmp/image.tgz" ;;
       *) cp "$tarball" "$tmp/image.tgz" ;;
     esac
     echo "$sum  $tmp/image.tgz" | sha256sum -c --quiet - \
