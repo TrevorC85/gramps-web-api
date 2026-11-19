@@ -69,6 +69,7 @@ from ..util import abort_with_message, get_locale_for_language
 from ..auth import require_permissions
 from . import ProtectedResource
 from .emit import GrampsJSONEncoder
+from .link_confidence import IsLessThanNthGenerationAncestorOfAllFamilies
 from .filter_param_types import (
     get_label_text,
     get_param_types,
@@ -191,7 +192,11 @@ _NAMESPACE_MODULES = {
 }
 
 _ADDITIONAL_RULES: dict[str, list[type[Rule]]] = {
-    "Person": [HasAssociationType, _matches_query_rule(PERSON, "People")],
+    "Person": [
+        HasAssociationType,
+        IsLessThanNthGenerationAncestorOfAllFamilies,
+        _matches_query_rule(PERSON, "People"),
+    ],
     "Family": [_matches_query_rule(FAMILY, "Families")],
     "Event": [_matches_query_rule(EVENT, "Events")],
     "Place": [_matches_query_rule(PLACE, "Places")],
