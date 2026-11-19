@@ -107,8 +107,9 @@ curl.exe -s -o NUL -w "%{http_code}`n" https://collinsfamilytree.net/api/metadat
 curl.exe -s -o NUL -w "%{http_code}`n" "https://collinsfamilytree.net/api/childref-confidence/?person=I0009&generations=2"  # 401 (new endpoint exists, needs login)
 ```
 In the browser:
-- **Owner** (trevor): Family Tree → Ancestor Tree of Mike (I0009): coloured lines, legend, one line
-  to Donna; hover shows "Also: Birth — 2nd parent family …". Lists and search still work.
+- **Owner** (trevor): Family Tree → Ancestor Tree of I0009 (the person with a birth and an
+  adoptive family): coloured lines, legend, one line to the parent who is in both families; hover
+  shows "Also: Birth — 2nd parent family …". Lists and search still work.
 - **Guest** (a Guest-role account; create a temporary one under Settings → Users if none, delete it
   afterwards): private people (e.g. living relatives marked private) are not listed or searchable and
   do not appear as cards in the tree; links to them are not drawn.
