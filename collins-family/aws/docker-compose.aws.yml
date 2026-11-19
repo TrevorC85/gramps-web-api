@@ -36,6 +36,10 @@ x-grampsweb: &grampsweb
     GRAMPSWEB_RATELIMIT_STORAGE_URI: "redis://grampsweb_redis:6379/1"
     GRAMPSWEB_REGISTRATION_DISABLED: "True"
     GRAMPSWEB_DISABLE_TELEMETRY: "True"
+    # Collins fork: guests see private living people as first-name-only stubs and can
+    # search them by that name (both grampsweb and celery, via this anchor). Ignored by
+    # the official image (rollback): living people are then hidden completely.
+    GRAMPSWEB_LIVING_FIRST_NAME_ONLY: "True"
     GUNICORN_NUM_WORKERS: "3"
     GUNICORN_TIMEOUT: "300"
   volumes:
