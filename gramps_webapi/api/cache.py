@@ -103,6 +103,16 @@ def make_cache_key_request(*args, **kwargs):
     # the request result will depend on whether the user can view private records
     # this will be "1" if the user can view private records, "0" otherwise
     permission_hash = str(int(has_permissions({PERM_VIEW_PRIVATE})))
+    # Collins family fork: restricted responses also depend on whether
+    # living people are shown by first name (LIVING_FIRST_NAME_ONLY)
+    if permission_hash == "0":
+        # imported here: .util imports this module's users
+        from .util import (  # pylint: disable=import-outside-toplevel
+            _living_first_name_only,
+        )
+
+        if _living_first_name_only():
+            permission_hash += "L"
 
     tree_id = get_tree_from_jwt_or_fail()
     db_timestamp = get_db_last_change_timestamp(tree_id)
