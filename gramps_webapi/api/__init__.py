@@ -79,6 +79,7 @@ from .resources.importers import (
     ImportersResource,
     RestoreFileResource,
 )
+from .resources.link_confidence import ChildRefConfidenceResource
 from .resources.living import LivingDatesResource, LivingResource
 from .resources.media import MediaObjectResource, MediaObjectsResource
 from .resources.merge import (
@@ -750,6 +751,14 @@ register_endpt(
     tags=["Living"],
 )
 register_endpt(LivingResource, "/living/<string:handle>", "living", tags=["Living"])
+
+# Child-parent link confidence (Collins prototype)
+register_endpt(
+    ChildRefConfidenceResource,
+    "/childref-confidence/",
+    "childref-confidence",
+    tags=["Families"],
+)
 # Reports
 register_endpt(
     ReportFileResource,
