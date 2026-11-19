@@ -1,0 +1,117 @@
+# Gramps Web on AWS Lightsail (one x86_64 instance) -- item 8 from the 18 Nov 2026 issue list.
+#
+# Differences from the local ../docker-compose.yml:
+# - normal Docker bridge networks instead of network_mode: host
+# - Valkey (Redis) only on an internal network: no published port, no internet
+# - Caddy in front on 80/443 with automatic HTTPS (Let's Encrypt), proxying to grampsweb:5000
+# - every image pinned by tag AND multi-arch index digest (each index has linux/amd64);
+#   grampsweb 26.11.2 = gramps-webapi 3.25.2, the version the upload patch was written against
+# - data lives on the instance's own SSD (GRAMPS_DATA_DIR, default /srv/gramps/data)
+# - fewer gunicorn workers for the 2 GB Lightsail bundle
+#
+# Required variables (systemd writes them to /run/gramps-web/compose.env at start):
+#   DOMAIN_NAME, SITE_HOSTS, ACME_EMAIL, GRAMPSWEB_SECRET_KEY
+# Optional: GRAMPS_DATA_DIR (default /srv/gramps/data), CADDY_DATA_DIR (default /srv/gramps/caddy)
+#
+# Run from this folder:
+#   docker compose --env-file /run/gramps-web/compose.env -f docker-compose.aws.yml up -d
+
+name: gramps-web
+
+x-grampsweb: &grampsweb
+  # 26.11.2 is the image the local site runs (gramps-webapi 3.25.2). The digest is the
+  # multi-arch index (amd64 sha256:467f6553... + arm64), checked on ghcr.io 18 Nov 2026;
+  # the local x86_64 site runs exactly this index digest.
+  image: ghcr.io/gramps-project/grampsweb:26.11.2@sha256:80a1d75ca0f67f9203aecca60f7639312a2769fe0af45b34608b0add64f7c07f
+  restart: unless-stopped
+  environment:
+    GRAMPSWEB_TREE: "Collins Family"
+    GRAMPSWEB_BASE_URL: "https://${DOMAIN_NAME:?DOMAIN_NAME is required}"
+    GRAMPSWEB_SECRET_KEY: "${GRAMPSWEB_SECRET_KEY:?GRAMPSWEB_SECRET_KEY is required}"
+    GRAMPSWEB_CELERY_CONFIG__broker_url: "redis://grampsweb_redis:6379/0"
+    GRAMPSWEB_CELERY_CONFIG__result_backend: "redis://grampsweb_redis:6379/0"
+    GRAMPSWEB_RATELIMIT_STORAGE_URI: "redis://grampsweb_redis:6379/1"
+    GRAMPSWEB_REGISTRATION_DISABLED: "True"
+    GRAMPSWEB_DISABLE_TELEMETRY: "True"
+    GUNICORN_NUM_WORKERS: "3"
+    GUNICORN_TIMEOUT: "300"
+  volumes:
+    - ${GRAMPS_DATA_DIR:-/srv/gramps/data}/users:/app/users
+    - ${GRAMPS_DATA_DIR:-/srv/gramps/data}/indexdir:/app/indexdir
+    - ${GRAMPS_DATA_DIR:-/srv/gramps/data}/thumbnail_cache:/app/thumbnail_cache
+    - ${GRAMPS_DATA_DIR:-/srv/gramps/data}/cache:/app/cache
+    - ${GRAMPS_DATA_DIR:-/srv/gramps/data}/secret:/app/secret
+    - ${GRAMPS_DATA_DIR:-/srv/gramps/data}/grampsdb:/root/.gramps/grampsdb
+    - ${GRAMPS_DATA_DIR:-/srv/gramps/data}/media:/app/media
+    - ${GRAMPS_DATA_DIR:-/srv/gramps/data}/tmp:/tmp
+    - ../frontend-config.js:/app/static/config.js:ro
+    # Uploads over 10 MiB (see ../patches/README.md). Mounted into BOTH grampsweb and celery.
+    - ../patches/gramps_webapi/api/file.py:/venv/lib/python3.13/site-packages/gramps_webapi/api/file.py:ro
+
+services:
+  grampsweb:
+    <<: *grampsweb
+    container_name: grampsweb
+    command:
+      - /bin/sh
+      - -c
+      - >-
+        exec gunicorn -w $${GUNICORN_NUM_WORKERS:-3} -b 0.0.0.0:5000 gramps_webapi.wsgi:app
+        --timeout $${GUNICORN_TIMEOUT:-300} --limit-request-line 8190 --preload
+    depends_on:
+      - grampsweb_redis
+    # No published ports: only Caddy (same "web" network) reaches port 5000.
+    networks:
+      - web
+      - backend
+
+  grampsweb_celery:
+    <<: *grampsweb
+    container_name: grampsweb_celery
+    command: celery -A gramps_webapi.celery worker --loglevel=INFO --concurrency=1
+    depends_on:
+      - grampsweb
+      - grampsweb_redis
+    networks:
+      - backend
+
+  grampsweb_redis:
+    # index digest (amd64 sha256:bba7a8ff...), checked on Docker Hub 18 Nov 2026
+    image: docker.io/valkey/valkey:8.1.12-alpine@sha256:9971099af41c36e887aabdfe22b80c0fe45df949163dfc9cb434febc57cfc3fc
+    container_name: grampsweb_redis
+    restart: unless-stopped
+    command: ["valkey-server", "--port", "6379", "--save", "60", "1"]
+    volumes:
+      - ${GRAMPS_DATA_DIR:-/srv/gramps/data}/redis:/data
+    networks:
+      - backend
+
+  caddy:
+    # index digest (amd64 sha256:fc9cbc10...), checked on Docker Hub 18 Nov 2026
+    image: docker.io/library/caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    container_name: caddy
+    restart: unless-stopped
+    depends_on:
+      - grampsweb
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN_NAME: "${DOMAIN_NAME:?DOMAIN_NAME is required}"
+      SITE_HOSTS: "${SITE_HOSTS:?SITE_HOSTS is required}"
+      ACME_EMAIL: "${ACME_EMAIL:?ACME_EMAIL is required}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates persist under /srv/gramps so restarts don't re-request them.
+      - ${CADDY_DATA_DIR:-/srv/gramps/caddy}/data:/data
+      - ${CADDY_DATA_DIR:-/srv/gramps/caddy}/config:/config
+    networks:
+      - web
+
+networks:
+  web: {}
+  backend:
+    # No route to the internet and nothing published: Valkey is reachable only
+    # from grampsweb and grampsweb_celery.
+    internal: true

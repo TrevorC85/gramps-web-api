@@ -1,0 +1,27 @@
+# Caddy reverse proxy for Gramps Web. Caddy gets and renews the Let's Encrypt
+# certificate(s) automatically once DNS for the host names points at the static IP.
+# SITE_HOSTS is "<domain>" or "<domain> www.<domain>" (set by gramps-env.sh);
+# www is redirected to the bare domain.
+{
+	email {$ACME_EMAIL}
+}
+
+{$SITE_HOSTS} {
+	@www host www.{$DOMAIN_NAME}
+	redir @www https://{$DOMAIN_NAME}{uri} permanent
+
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+	# No request_body limit: large scans (>10 MiB) must reach the patched upload handler.
+	reverse_proxy grampsweb:5000 {
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+		}
+	}
+}

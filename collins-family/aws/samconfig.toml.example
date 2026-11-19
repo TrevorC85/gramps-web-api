@@ -1,0 +1,36 @@
+# Copy to samconfig.toml (git-ignored) and fill in the <...> values, or run
+# `sam deploy --guided` once and let SAM write it. Empty values are not allowed in
+# parameter_overrides (SAM rejects "Key="), so optional parameters are commented out.
+# Contains no secrets: the server makes its own Gramps secret key, and bucket access
+# comes from Lightsail resource access (no access keys).
+version = 0.1
+
+[default.global.parameters]
+stack_name = "collins-family-gramps"     # lower-case, at most 33 characters (bucket name limit)
+
+[default.validate.parameters]
+lint = true
+
+[default.deploy.parameters]
+region = "us-west-2"
+profile = "collins"
+capabilities = "CAPABILITY_AUTO_EXPAND"   # the SAM transform; the template has no IAM resources
+confirm_changeset = true
+resolve_s3 = true                         # SAM makes its own small artifacts bucket
+disable_rollback = false
+parameter_overrides = [
+  "DomainName=<family.example.com>",
+  "AcmeEmail=<you@example.com>",
+  "HostedZoneId=<Z...>",                  # aws route53 list-hosted-zones-by-name --dns-name <family.example.com>
+  "CreateWwwRecord=true",
+  "AvailabilityZoneLetter=a",
+  "BundleId=small_3_0",
+  "BlueprintId=amazon_linux_2023",
+  "InstanceGeneration=1",
+  "SshAccess=lightsail-connect",
+  # "SshCidr=203.0.113.4/32",             # optional extra SSH source
+  "RepoUrl=https://github.com/TrevorC85/gramps-web-api.git",
+  "RepoBranch=collins-family",
+  "SeedObjectKey=seed/gramps-seed.tgz",
+  "SeedWaitMinutes=180",
+]

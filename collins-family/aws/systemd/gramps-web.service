@@ -1,0 +1,17 @@
+[Unit]
+Description=Gramps Web (docker compose: grampsweb, celery, valkey, caddy)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/gramps-web/collins-family/aws
+ExecStartPre=/opt/gramps-web/collins-family/aws/gramps-env.sh
+ExecStart=/usr/local/lib/docker/cli-plugins/docker-compose --env-file /run/gramps-web/compose.env -f docker-compose.aws.yml up -d --remove-orphans
+ExecStop=/usr/local/lib/docker/cli-plugins/docker-compose --env-file /run/gramps-web/compose.env -f docker-compose.aws.yml down
+TimeoutStartSec=1200
+
+[Install]
+WantedBy=multi-user.target

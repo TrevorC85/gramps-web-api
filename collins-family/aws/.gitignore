@@ -1,0 +1,3 @@
+.aws-sam/
+# your filled-in copy has your email and domain; this repo is public
+samconfig.toml

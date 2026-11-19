@@ -1,0 +1,10 @@
+[Unit]
+Description=Back up Gramps Web data to the Lightsail bucket (backups/latest.tgz)
+Requires=docker.service
+After=docker.service gramps-web.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/gramps-web/collins-family/aws/backup-s3.sh
+Nice=10
+IOSchedulingClass=idle
