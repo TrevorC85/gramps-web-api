@@ -38,11 +38,19 @@ class AccessPolicy:
     """
 
     view_private: bool
+    # Collins family fork: show private living people as first-name stubs
+    # (see `living.py`) instead of hiding them
+    living_first_name_only: bool = False
 
     @classmethod
     def from_permissions(cls, permissions: Collection[str]) -> AccessPolicy:
         """Return the policy for a user with these permissions."""
         return cls(view_private=PERM_VIEW_PRIVATE in permissions)
+
+    @property
+    def redacts_living(self) -> bool:
+        """Whether private living people are shown as first-name stubs."""
+        return not self.view_private and self.living_first_name_only
 
     @property
     def sees_everything(self) -> bool:
@@ -65,4 +73,4 @@ class AccessPolicy:
 
     def cache_key(self) -> str:
         """Part of cache keys for responses that depend on the policy."""
-        return str(int(self.view_private))
+        return f"{int(self.view_private)}{int(self.redacts_living)}"

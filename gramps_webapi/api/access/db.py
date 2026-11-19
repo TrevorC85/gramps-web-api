@@ -60,6 +60,13 @@ from ..resources.db_backend import (
     sql_count,
     sql_sorted_handles,
 )
+from .living import (
+    LivingRedaction,
+    compute_redaction,
+    family_stub,
+    person_stub,
+    strip_child_refs,
+)
 from .policy import AccessPolicy
 from .sanitize import (
     LINK_PREFIX,
@@ -152,6 +159,8 @@ class RestrictedDb(DbReadBase):
         self.__child_refs: Optional[dict[str, frozenset[str]]] = None
         # the same for single families, until a request needs many
         self.__single_child_refs: dict[str, frozenset[str]] = {}
+        # living people shown as first-name stubs, computed on first use
+        self.__redaction: Optional[LivingRedaction] = None
         self.name_formats = db.name_formats
         # the tree's title, set by Gramps when opening it
         self.db_name = getattr(db, "db_name", "")
@@ -181,8 +190,33 @@ class RestrictedDb(DbReadBase):
 
     # visibility
 
+    def __living(self) -> Optional[LivingRedaction]:
+        """The living-people redaction, if the policy asks for it."""
+        if not self.__policy.redacts_living:
+            return None
+        if self.__redaction is None:
+            self.__redaction = compute_redaction(self.__db)
+        return self.__redaction
+
+    def living_stub_handles(self) -> frozenset[str]:
+        """Handles of the living people shown as first-name stubs (if any)."""
+        living = self.__living()
+        return living.people if living is not None else frozenset()
+
     def is_visible(self, class_name: str, handle: Optional[str]) -> bool:
         """Whether the object with this handle exists and is visible."""
+        living = self.__living()
+        if living is not None and handle:
+            if class_name == "Person" and handle in living.people:
+                return True
+            if class_name == "Family" and handle in living.families:
+                return True
+            if living.is_hidden(class_name, handle):
+                return False
+        return self.__base_visible(class_name, handle)
+
+    def __base_visible(self, class_name: str, handle: Optional[str]) -> bool:
+        """Visibility by the policy's private flag rules alone."""
         if class_name == "Tag":
             # tags have no privacy
             return True
@@ -204,13 +238,21 @@ class RestrictedDb(DbReadBase):
 
     def __visible_handles(self, class_name: str) -> frozenset[str]:
         if class_name not in self.__visible:
-            self.__visible[class_name] = frozenset(
+            visible = frozenset(
                 row[0]
                 for row in self.__select_visible(
                     class_name, EXTRA_COLUMNS.get(class_name)
                 )
                 if self.__row_visible(class_name, row)
             )
+            living = self.__living()
+            if living is not None:
+                if class_name == "Person":
+                    visible |= living.people
+                elif class_name == "Family":
+                    visible |= living.families
+                visible -= living.hidden.get(class_name, frozenset())
+            self.__visible[class_name] = visible
         return self.__visible[class_name]
 
     def __row_visible(self, class_name: str, row: Row) -> bool:
@@ -298,6 +340,12 @@ class RestrictedDb(DbReadBase):
                 )
             else:
                 visible = self.is_visible(class_name, value)
+                living = self.__living()
+                if living is not None and value and (
+                    value in living.people or value in living.families
+                ):
+                    # a stub is no link target: the note would name them
+                    visible = self.__base_visible(class_name, value)
             if not visible:
                 return False
         return True
@@ -317,6 +365,18 @@ class RestrictedDb(DbReadBase):
         returned. Return None if the backend can't sort this in SQL.
         """
         if not has_secondary_columns(self.__db):
+            return None
+        if self.__living() is not None and class_name in (
+            "Person",
+            "Family",
+            "Note",
+            "Event",
+            "Citation",
+            "Media",
+            "Source",
+        ):
+            # SQL would sort stubs by hidden values (e.g. surnames) and count
+            # hidden objects: sort the sanitized data in Python instead
             return None
         if class_name == "Tag":
             # tags have no privacy
@@ -358,6 +418,16 @@ class RestrictedDb(DbReadBase):
                 for handle in as_list(clean["parent_family_list"])
                 if self.__child_ref_visible(as_handle(handle) or "", person_handle)
             ]
+        living = self.__living()
+        if living is not None:
+            handle = as_handle(data["handle"]) or ""
+            if class_name == "Person" and handle in living.people:
+                clean = person_stub(clean)
+            elif class_name == "Family":
+                in_living = handle in living.families
+                clean = strip_child_refs(clean, living.people, all_refs=in_living)
+                if in_living:
+                    clean = family_stub(clean)
         return DataDict(clean)
 
     def __child_ref_visible(self, family_handle: str, person_handle: str) -> bool:
@@ -547,6 +617,10 @@ class RestrictedDb(DbReadBase):
         # no need to sanitize: only the primary name is used
         for handle, data in self.__db._iter_raw_data(CLASS_TO_KEY_MAP["Person"]):
             if handle not in people:
+                continue
+            living = self.__living()
+            if living is not None and handle in living.people:
+                # stubs have no surname
                 continue
             name = as_object(data["primary_name"])
             if name.get("private"):

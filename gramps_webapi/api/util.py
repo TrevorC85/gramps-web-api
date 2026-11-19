@@ -279,6 +279,16 @@ def get_tree_from_jwt_or_fail() -> str:
     return tree
 
 
+def _living_first_name_only() -> bool:
+    """Whether restricted users see private living people by first name."""
+    if not has_app_context():
+        return False
+    value = current_app.config.get("LIVING_FIRST_NAME_ONLY", False)
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)
+
+
 def get_db_outside_request(
     tree: str, view_private: bool, readonly: bool, user_id: str
 ) -> DbReadBase:
@@ -307,7 +317,13 @@ def get_db_outside_request(
             )
         # if we're not authorized to view private records,
         # return a restricted DB instead of the real one
-        return RestrictedDb(dbstate.db, AccessPolicy(view_private=False))
+        return RestrictedDb(
+            dbstate.db,
+            AccessPolicy(
+                view_private=False,
+                living_first_name_only=_living_first_name_only(),
+            ),
+        )
     return dbstate.db
 
 

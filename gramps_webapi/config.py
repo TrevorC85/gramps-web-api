@@ -108,6 +108,9 @@ class DefaultConfig(object):
     VECTOR_EMBEDDING_BASE_URL = None
     VECTOR_EMBEDDING_API_KEY = None
     DISABLE_TELEMETRY = False
+    # Collins family fork: users who may not view private records see
+    # private living people by their first name only (api/access/living.py)
+    LIVING_FIRST_NAME_ONLY = False
     SENTRY_DSN = ""
     SENTRY_ENVIRONMENT = ""
     SENTRY_TRACES_SAMPLE_RATE = 0.0
