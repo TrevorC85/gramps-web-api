@@ -341,8 +341,15 @@ def upload_file_local(
         raise ValueError(f"File {path} is not within the base directory.")
     # create folders if necessary
     os.makedirs(path.parent, exist_ok=True)
-    fs = FileStorage(stream)
-    fs.save(path)
+    # SpooledTemporaryFile.name becomes an int fd after the 10 MiB rollover;
+    # Werkzeug FileStorage then raises TypeError. Write the stream directly.
+    with open(path, "wb") as dest:
+        if hasattr(stream, "seek"):
+            try:
+                stream.seek(0)
+            except Exception:
+                pass
+        shutil.copyfileobj(stream, dest)
 
 
 def get_checksum(fp) -> str:
