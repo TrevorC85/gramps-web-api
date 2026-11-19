@@ -1,0 +1,6 @@
+.env
+.admin_password
+data/
+screens/
+__pycache__/
+*.pyc

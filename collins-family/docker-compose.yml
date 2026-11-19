@@ -1,0 +1,66 @@
+# Local Gramps Web stack, based on the official compose example:
+# https://github.com/gramps-project/gramps-web-docs/blob/main/examples/docker-compose-base/docker-compose.yml
+# (verified 18 Nov 2026 from https://www.grampsweb.org/install_setup/deployment/)
+#
+# Differences from the official file for this local/AWS-shaped setup:
+# - app published on host port 5055 (Caddy/HTTPS is for AWS, not local)
+# - bind mounts under ./data instead of named volumes (easier backup)
+# - SECRET_KEY from .env
+# - registration disabled; frontend hides the register link
+# - tree name "Collins Family"
+# - network_mode: host, because Docker bridge inter-container traffic times
+#   out on this box (iptables/br_netfilter). Redis is bound to 127.0.0.1 only.
+#   A normal AWS VM can switch back to the official bridge network.
+
+services:
+  grampsweb: &grampsweb
+    image: ghcr.io/gramps-project/grampsweb:latest
+    container_name: grampsweb
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - /bin/sh
+      - -c
+      - exec gunicorn -w $${GUNICORN_NUM_WORKERS:-8} -b 0.0.0.0:5055 gramps_webapi.wsgi:app --timeout $${GUNICORN_TIMEOUT:-120} --limit-request-line 8190 --preload
+    env_file:
+      - .env
+    environment:
+      GRAMPSWEB_TREE: "Collins Family"
+      GRAMPSWEB_BASE_URL: "http://localhost:5055"
+      GRAMPSWEB_CELERY_CONFIG__broker_url: "redis://127.0.0.1:6379/0"
+      GRAMPSWEB_CELERY_CONFIG__result_backend: "redis://127.0.0.1:6379/0"
+      GRAMPSWEB_RATELIMIT_STORAGE_URI: "redis://127.0.0.1:6379/1"
+      GRAMPSWEB_REGISTRATION_DISABLED: "True"
+      GRAMPSWEB_DISABLE_TELEMETRY: "True"
+    depends_on:
+      - grampsweb_redis
+    volumes:
+      - ./data/users:/app/users
+      - ./data/indexdir:/app/indexdir
+      - ./data/thumbnail_cache:/app/thumbnail_cache
+      - ./data/cache:/app/cache
+      - ./data/secret:/app/secret
+      - ./data/grampsdb:/root/.gramps/grampsdb
+      - ./data/media:/app/media
+      - ./data/tmp:/tmp
+      - ./frontend-config.js:/app/static/config.js:ro
+      # Uploads over 10 MiB: patched gramps_webapi/api/file.py (see patches/README.md).
+      # Shared by grampsweb_celery through the <<: *grampsweb anchor.
+      - ./patches/gramps_webapi/api/file.py:/venv/lib/python3.13/site-packages/gramps_webapi/api/file.py:ro
+
+  grampsweb_celery:
+    <<: *grampsweb
+    container_name: grampsweb_celery
+    depends_on:
+      - grampsweb
+      - grampsweb_redis
+    command: celery -A gramps_webapi.celery worker --loglevel=INFO --concurrency=2
+
+  grampsweb_redis:
+    image: docker.io/valkey/valkey:8-alpine
+    container_name: grampsweb_redis
+    restart: unless-stopped
+    network_mode: host
+    command: ["valkey-server", "--bind", "127.0.0.1", "--port", "6379", "--protected-mode", "yes"]
+    volumes:
+      - ./data/redis:/data
