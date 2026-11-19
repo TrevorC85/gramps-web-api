@@ -10,6 +10,7 @@ import urllib.request
 from pathlib import Path
 import sys as _sys_r5
 _sys_r5.path.insert(0, str(Path(__file__).resolve().parent))
+from lib_parse import EVENT_PREFIX  # noqa: E402
 
 PASSFILE = Path("/workspace/gramps-web/.admin_password")
 BASE = "http://127.0.0.1:5055"
@@ -130,7 +131,43 @@ def main():
             birth_fixes.append({"gramps_id": p.get("gramps_id"), "new_birth_ref_index": new_idx})
             print("BIRTH INDEX", p.get("gramps_id"), "->", new_idx)
 
+    # 19 Nov 2026: the old "b" prefix bug left places named "ur. X" and dates whose text is
+    # the raw chart clause. Clean both: clear raw-clause date text, strip "ur. " from place
+    # names, merging into an existing same-named sibling place when there is one.
+    text_fixes, place_fixes = [], []
+    for ev in api.get("/api/events/"):
+        d = ev.get("date") or {}
+        if d.get("text") and not any(d.get("dateval") or [0, 0, 0]) and EVENT_PREFIX.match(d["text"]):
+            full = api.get(f"/api/events/{ev['handle']}")
+            full["date"]["text"] = ""
+            api.req("PUT", f"/api/events/{ev['handle']}", full)
+            text_fixes.append(ev.get("gramps_id"))
+    places = api.get("/api/places/")
+    for pl in places:
+        name = (pl.get("name") or {}).get("value") or ""
+        if not re.match(r"^b?ur\.\s+", name):
+            continue
+        clean = re.sub(r"^b?ur\.\s+", "", name)
+        parent = [r["ref"] for r in pl.get("placeref_list") or []]
+        twin = next((q for q in places if q["handle"] != pl["handle"]
+                     and (q.get("name") or {}).get("value") == clean
+                     and [r["ref"] for r in q.get("placeref_list") or []] == parent), None)
+        if twin:
+            for ev in api.get("/api/events/"):
+                if ev.get("place") == pl["handle"]:
+                    full = api.get(f"/api/events/{ev['handle']}")
+                    full["place"] = twin["handle"]
+                    api.req("PUT", f"/api/events/{ev['handle']}", full)
+            api.req("DELETE", f"/api/places/{pl['handle']}")
+        else:
+            full = api.get(f"/api/places/{pl['handle']}")
+            full["name"]["value"] = clean
+            full["title"] = re.sub(r"^b?ur\.\s+", "", full.get("title") or clean)
+            api.req("PUT", f"/api/places/{pl['handle']}", full)
+        place_fixes.append({"gramps_id": pl.get("gramps_id"), "name": clean, "merged": bool(twin)})
+
     report = {"retyped_to_burial": changed, "n": len(changed),
+              "date_text_cleared": text_fixes, "ur_places_fixed": place_fixes,
               "skipped_non_birth": skipped, "birth_index_fixes": birth_fixes}
     OUT.write_text(json.dumps(report, indent=2, ensure_ascii=False))
     print(json.dumps({"n": len(changed), "birth_index_fixes": len(birth_fixes)}, indent=2))

@@ -544,7 +544,9 @@ class Loader:
             "private": private,
             "date": self.gram_date(ev.get("date")) or {
                 "_class": "Date", "calendar": 0, "modifier": 0, "quality": 0,
-                "newyear": 0, "dateval": [0, 0, 0, False], "text": ev.get("raw") or "",
+                # no date: leave the date empty; the raw chart clause is already the
+                # event description (19 Nov 2026 audit: 122 dates held "bur. X" text)
+                "newyear": 0, "dateval": [0, 0, 0, False], "text": "",
             },
             "place": place_h or "",
             "citation_list": [],

@@ -33,7 +33,11 @@ class TestEventPrefix(unittest.TestCase):
         for d in JUNK_DESCS:
             with self.subTest(d=d):
                 self.assertIsNone(EVENT_PREFIX.match(d), d)
-                self.assertEqual(parse_fact_lines([d])["events"], [], d)
+                # The junk word itself never starts an event. A genuine inner clause
+                # ("blacksmith, b. c1826 Rastrick") may still yield its own event (19 Nov 2026).
+                for ev in parse_fact_lines([d])["events"]:
+                    self.assertNotEqual(ev["raw"], d, d)
+                    self.assertTrue(EVENT_PREFIX.match(ev["raw"]) or ev.get("form") == "range", d)
 
     def test_other_ordinary_words(self):
         for d in ["Detroit household", "Dates 1795–1845 are tree-only", "Burial not found",

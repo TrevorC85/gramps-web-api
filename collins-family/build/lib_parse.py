@@ -108,100 +108,98 @@ def _month(tok: str) -> int | None:
     return MONTHS.get(tok.lower().rstrip("."))
 
 
-def parse_date_fragment(text: str) -> dict[str, Any] | None:
-    """Parse a date-ish fragment into a Gramps-like date dict plus flags.
+YEAR_RE = r"(?:1[5-9]|20)\d{2}"
+_QUAL = r"(?P<q>c\.|c(?=\d)|ca\.?|circa|abt\.?|about|~|bef\.?|before|aft\.?|after)?\s*"
+_MON = r"(?P<mon>[A-Za-z]{3,9})\.?"
+# Forms tried in order; every one must start the text (after an optional qualifier).
+_DATE_FORMS = [
+    # 29/30 Jan 1924 and "3 or 10 Nov 1953": uncertain day -> month + year only
+    ("dd_or", re.compile(r"^" + _QUAL + r"\d{1,2}\s*(?:/|or)\s*\d{1,2}\s+" + _MON + r",?\s+(?P<y>" + YEAR_RE + r")(?!\d)", re.I)),
+    ("dmy", re.compile(r"^" + _QUAL + r"(?P<d>\d{1,2})(?:st|nd|rd|th)?\s+" + _MON + r",?\s+(?P<y>" + YEAR_RE + r")(?!\d)", re.I)),
+    ("mdy", re.compile(r"^" + _QUAL + _MON + r"\s+(?P<d>\d{1,2})(?:st|nd|rd|th)?,?\s+(?P<y>" + YEAR_RE + r")(?!\d)", re.I)),
+    ("my", re.compile(r"^" + _QUAL + _MON + r",?\s+(?P<y>" + YEAR_RE + r")(?!\d)", re.I)),
+    ("iso", re.compile(r"^" + _QUAL + r"(?P<y>" + YEAR_RE + r")-(?P<m>\d{1,2})-(?P<d>\d{1,2})(?!\d)", re.I)),
+    ("y", re.compile(r"^" + _QUAL + r"(?P<y>" + YEAR_RE + r")(?!\d)", re.I)),
+]
+# 1744/45, 1747/8: double (Old Style / New Style) year tail
+_DOUBLE_TAIL = re.compile(r"^\s*/\s*(?P<alt>\d{1,4})(?!\d)")
+# c1864-65, about 1803–1805: year-range tail
+_RANGE_TAIL = re.compile(r"^\s*[-–—]\s*(?P<y2>\d{2,4})(?!\d)(?!\s+[A-Za-z]{3,9}\.?\s+\d)")
+_MODS = {"c": 3, "c.": 3, "ca": 3, "ca.": 3, "circa": 3, "abt": 3, "abt.": 3, "about": 3, "~": 3,
+         "bef": 1, "bef.": 1, "before": 1, "aft": 2, "aft.": 2, "after": 2}
 
-    Returns None if no year can be found. Does not invent day/month.
+
+def strip_brackets(text: str) -> str:
+    """Remove (bracketed commentary), including an unclosed trailing '(...'."""
+    t = re.sub(r"\([^()]*\)", " ", text or "")
+    t = re.sub(r"\([^()]*$", " ", t)
+    t = t.replace(")", " ")
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def lead_date(text: str) -> tuple[dict[str, Any] | None, int]:
+    """Parse a date that STARTS the text (brackets already stripped).
+
+    Returns (date dict, end offset) or (None, 0). Never invents day/month.
     """
+    raw = (text or "").replace("–", "-").replace("—", "-")
+    s = raw.lstrip()
+    off = len(raw) - len(s)
+    for name, rx in _DATE_FORMS:
+        m = rx.match(s)
+        if not m:
+            continue
+        gd = m.groupdict()
+        mon = 0
+        if gd.get("mon"):
+            mon = _month(gd["mon"]) or 0
+            if not mon:
+                continue
+        elif gd.get("m"):
+            mon = int(gd["m"])
+        day = int(gd["d"]) if gd.get("d") and name != "dd_or" else 0
+        year = int(gd["y"])
+        q = (gd.get("q") or "").lower().strip()
+        modifier = _MODS.get(q, 0)
+        quality = 0
+        end = m.end()
+        rest = s[end:]
+        alt_year = None
+        t = _DOUBLE_TAIL.match(rest)
+        if t and name in ("y", "my", "dmy", "mdy"):
+            suf = t.group("alt")
+            if len(suf) < 4:
+                alt_year = int(str(year)[: 4 - len(suf)] + suf)
+            else:
+                alt_year = int(suf)
+            end += t.end()
+        else:
+            t = _RANGE_TAIL.match(rest)
+            if t and name == "y":
+                end += t.end()
+                if not modifier:
+                    modifier = 3  # a year range is "about" its first year
+        if "?" in s[end:end + 1]:
+            quality = 1
+            end += 1
+        if name == "dd_or":
+            quality = 1
+        return ({
+            "calendar": 0, "modifier": modifier, "quality": quality, "newyear": 0,
+            "dateval": [day, mon, year, False], "text": "", "year": year,
+            "alt_year": alt_year, "original": s[:end].strip(),
+        }, off + end)
+    return None, 0
+
+
+def parse_date_fragment(text: str) -> dict[str, Any] | None:
+    """Parse a date-ish fragment. Bracketed commentary is ignored; the date must
+    start the fragment (after c./ca./~/abt./bef./aft.). Returns None when no date
+    starts the text. Does not invent day/month."""
     if not text:
         return None
-    raw = text.strip()
-    raw = raw.replace("–", "-").replace("—", "-")
-    quality = 0  # 0 regular, 1 estimated
-    modifier = 0  # 0 none, 3 about
-    lower = raw.lower()
-    if re.search(r"\b(c\.|ca\.|circa|abt\.?|about|~|approx)\b", lower):
-        modifier = 3
-        quality = 1
-    if "?" in raw:
-        quality = 1
-
-    # year only
-    m = re.search(r"\b((?:1[5-9]|20)\d{2})\b", raw)
-    if not m:
-        return None
-    year = int(m.group(1))
-
-    # double year 1747/8 or 1726/7
-    alt_year = None
-    m2 = re.search(r"\b((?:1[5-9]|20)\d{2})\s*/\s*(\d{1,2})\b", raw)
-    if m2:
-        y2 = int(m2.group(1)[:2] + m2.group(2).zfill(2) if len(m2.group(2)) <= 2 else m2.group(2))
-        # 1747/8 -> 1748; 1726/7 -> 1727
-        suffix = m2.group(2)
-        if len(suffix) == 1:
-            alt_year = int(str(year)[:3] + suffix)
-        elif len(suffix) == 2:
-            alt_year = int(str(year)[:2] + suffix)
-        # store as text date spanning the two years
-        return {
-            "calendar": 0, "modifier": 0, "quality": quality, "newyear": 0,
-            "dateval": [0, 0, year, False],
-            "text": raw.strip(),
-            "year": year,
-            "alt_year": alt_year,
-            "original": raw.strip(),
-        }
-
-    day = 0
-    month = 0
-    # 10 Mar 1928 / 10 March 1928
-    m = re.search(
-        r"\b(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9})\.?\s+((?:1[5-9]|20)\d{2})\b",
-        raw,
-    )
-    if m and _month(m.group(2)):
-        day, month, year = int(m.group(1)), _month(m.group(2)), int(m.group(3))
-    else:
-        # Mar 10, 1928 / March 10, 1928
-        m = re.search(
-            r"\b([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+((?:1[5-9]|20)\d{2})\b",
-            raw,
-        )
-        if m and _month(m.group(1)):
-            month, day, year = _month(m.group(1)), int(m.group(2)), int(m.group(3))
-        else:
-            # Mar 1928 / February 1870
-            m = re.search(r"\b([A-Za-z]{3,9})\.?\s+((?:1[5-9]|20)\d{2})\b", raw)
-            if m and _month(m.group(1)):
-                month, year = _month(m.group(1)), int(m.group(2))
-            else:
-                # 1928-03-10
-                m = re.search(r"\b((?:1[5-9]|20)\d{2})-(\d{1,2})-(\d{1,2})\b", raw)
-                if m:
-                    year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
-
-    # 29/30 Jan 1924 — range / uncertain day; keep as text
-    if re.search(r"\b\d{1,2}\s*/\s*\d{1,2}\s+[A-Za-z]", raw):
-        return {
-            "calendar": 0, "modifier": modifier, "quality": quality, "newyear": 0,
-            "dateval": [0, month, year, False] if month else [0, 0, year, False],
-            "text": raw.strip(),
-            "year": year,
-            "original": raw.strip(),
-            "uncertain_day": True,
-        }
-
-    return {
-        "calendar": 0,
-        "modifier": modifier,
-        "quality": quality,
-        "newyear": 0,
-        "dateval": [day, month, year, False],
-        "text": "",
-        "year": year,
-        "original": raw.strip(),
-    }
+    d, _ = lead_date(strip_brackets(text))
+    return d
 
 
 # Event prefixes on a fact fragment
@@ -214,29 +212,119 @@ EVENT_PREFIX = re.compile(
     r"^(?P<kind>bur\.|buried\b|bapt\.|baptized\b|bp\.|b\.|born\b|d\.|died\b|m\d?\.|marr\.|married\b)\s*:?\s*",
     re.I,
 )
+# A second event inside one clause: "b. ~1779, d. 30 Jan 1848" / "b. 22 Mar 1822, bp. 28 Jul 1822"
+_INNER_EVENT = re.compile(r",\s*(?=(?:bur\.|buried\b|bapt\.|baptized\b|bp\.|b\.|born\b|d\.|died\b)\s)", re.I)
+# "2 Jul 1877, Canada – 8 Dec 1952, Seattle" / "1828–1914" (no b./d. prefix): birth – death
+_RANGE_SPLIT = re.compile(r"\s*(?:–|—|\s-\s)\s*")
+# Things after a place that are not part of it
+_PLACE_CUT = re.compile(r",?\s*\b(?:aged?|age)\s+\d.*$|,?\s*\b(?:aged?|age)\s+(?:about\s+)?\d.*$", re.I)
 
 
 def split_fact_clauses(line: str) -> list[str]:
-    """Split a det/box line on semicolons and some ' / ' conflict markers kept together."""
+    """Split a det/box line on semicolons, and before an inner ', d.' / ', bur.' / ', bp.'
+    event, never inside brackets."""
     parts = []
     buf = []
     depth = 0
-    for ch in line:
+    i = 0
+    while i < len(line):
+        ch = line[i]
         if ch == "(":
             depth += 1
         elif ch == ")":
             depth = max(0, depth - 1)
-        if ch == ";" and depth == 0:
+        split_here = False
+        if depth == 0 and ch == ";":
+            split_here = True
+            skip = 1
+        elif depth == 0 and ch == "," and _INNER_EVENT.match(line, i):
+            split_here = True
+            skip = 1
+        if split_here:
             piece = "".join(buf).strip(" ,")
             if piece:
                 parts.append(piece)
             buf = []
-        else:
-            buf.append(ch)
+            i += skip
+            continue
+        buf.append(ch)
+        i += 1
     piece = "".join(buf).strip(" ,")
     if piece:
         parts.append(piece)
     return parts
+
+
+def clean_place_text(text: str) -> tuple[str | None, str]:
+    """Return (place or None, leftover commentary).
+
+    Cuts at '(' commentary, drops ages ('aged 59', 'age 6, ...') and rejects text that
+    is not a place name (no capital letter, starts lowercase/punctuation/digit)."""
+    t = (text or "").strip()
+    leftover = []
+    if "(" in t:
+        t, _, c = t.partition("(")
+        leftover.append(c.rstrip(")").strip())
+    m = _PLACE_CUT.search(t)
+    if m:
+        leftover.append(t[m.start():].strip(" ,"))
+        t = t[: m.start()]
+    if "?" in t.strip(" ,;:-"):
+        # an uncertain place ("Sorel?", "Wheaton, IL?") is not asserted as the event place;
+        # the raw clause stays in the event description
+        leftover.insert(0, t.strip(" ,;:-"))
+        return None, "; ".join(x for x in leftover if x)
+    t = t.strip(" ,;:-")
+    # trailing ", 71" / ", 44" (an age) or ", widow" / ", infant" style descriptors
+    m = re.search(r",\s*(\d{1,3}|widow|widower|infant|single|married|bread server|inmate)\s*$", t, re.I)
+    if m:
+        leftover.append(m.group(1))
+        t = t[: m.start()].strip(" ,")
+    # alternatives ("Winnipeg or Wolf Island", "Ballinliss/Killeavy") are not one place
+    if re.search(r"\bor\b|/", t):
+        leftover.insert(0, t)
+        return None, "; ".join(x for x in leftover if x)
+    if not t or not re.search(r"[A-ZÀ-ÖØ-Þ]", t) or not (t[0].isupper() or t[0] in "ÎÉÈÂ"):
+        if t:
+            leftover.insert(0, t)
+        return None, "; ".join(x for x in leftover if x)
+    return t, "; ".join(x for x in leftover if x)
+
+
+def _split_date_place(rest: str, typ: str) -> tuple[dict[str, Any] | None, str | None, str]:
+    """rest = clause text after the prefix. Returns (date, place, extra)."""
+    plain = strip_brackets(rest)
+    date, end = lead_date(plain)
+    extra = ""
+    if date is None and typ == "Marriage":
+        # spouse name before the date: "Toney J. King, 25 Aug 1898, King Co."
+        m = re.match(r"^([A-ZÀ-Þ][^\d]{1,60}?)[,\s]+(?=\d|c\d|~|abt)", plain)
+        if m:
+            d2, e2 = lead_date(plain[m.end():])
+            if d2:
+                extra = "Spouse mentioned: " + m.group(1).strip(" ,")
+                date, end = d2, m.end() + e2
+    if date is not None:
+        tail = plain[end:]
+    elif typ == "Marriage":
+        return None, None, rest
+    else:
+        tail = plain
+        # "bur. Aston Abbotts 8 Jan 1618/9": place first, date after it
+        for mm in re.finditer(r"(?:(?<=\s)|(?<=,))(?=\d|c\d|~)", plain):
+            d2, e2 = lead_date(plain[mm.start():])
+            if d2 and (d2.get("dateval")[1] or not plain[mm.start() + e2:].strip(" ,;:.")):
+                # a full date after the place, or a bare year that ends the clause
+                date = d2
+                tail = plain[: mm.start()] + " " + plain[mm.start() + e2:]
+                break
+    place, left = clean_place_text(tail.strip(" ,;:-"))
+    # comments that were in brackets in the original clause
+    for c in re.findall(r"\(([^()]*)\)", rest):
+        left = (left + "; " if left else "") + c.strip()
+    if left and not extra:
+        extra = ""
+    return date, place, extra
 
 
 def parse_fact_lines(lines: list[str]) -> dict[str, Any]:
@@ -257,11 +345,11 @@ def parse_fact_lines(lines: list[str]) -> dict[str, Any]:
         conflicts.append(blob)
 
     kind_map = {
-        "b": "Birth", "b.": "Birth", "born": "Birth",
-        "bp": "Baptism", "bp.": "Baptism", "bapt": "Baptism", "bapt.": "Baptism", "baptized": "Baptism",
-        "d": "Death", "d.": "Death", "died": "Death",
-        "m": "Marriage", "m.": "Marriage", "marr": "Marriage", "marr.": "Marriage", "married": "Marriage",
-        "bur": "Burial", "bur.": "Burial", "buried": "Burial",
+        "b": "Birth", "born": "Birth",
+        "bp": "Baptism", "bapt": "Baptism", "baptized": "Baptism",
+        "d": "Death", "died": "Death",
+        "m": "Marriage", "marr": "Marriage", "married": "Marriage",
+        "bur": "Burial", "buried": "Burial",
     }
 
     for line in lines:
@@ -271,60 +359,44 @@ def parse_fact_lines(lines: list[str]) -> dict[str, Any]:
         if line.startswith("~"):  # optional chart annotation
             notes.append(line.lstrip("~").strip())
             continue
-        for clause in split_fact_clauses(line):
-            # slash-separated alternative births: keep both as notes/conflict if two b.
+        clauses = split_fact_clauses(line)
+        # Un-prefixed "birth – death" range at the start of the line (root cause 1).
+        if clauses and not EVENT_PREFIX.match(clauses[0]):
+            first = clauses[0]
+            halves = _RANGE_SPLIT.split(strip_brackets(first), maxsplit=1)
+            if len(halves) == 2:
+                bd, bend = lead_date(halves[0])
+                dd, dend = lead_date(halves[1]) if halves[1].strip() else (None, 0)
+                if bd is not None and (dd is not None or not halves[1].strip()):
+                    bplace, _ = clean_place_text(halves[0][bend:].strip(" ,;:-"))
+                    events.append({"type": "Birth", "date": bd, "place_text": bplace or "",
+                                   "description": "", "raw": first, "form": "range"})
+                    if dd is not None:
+                        dplace, _ = clean_place_text(halves[1][dend:].strip(" ,;:-"))
+                        events.append({"type": "Death", "date": dd, "place_text": dplace or "",
+                                       "description": "", "raw": first, "form": "range"})
+                    clauses = clauses[1:]
+        for clause in clauses:
             if re.search(r"\bb\.\s+.+\s/\s+.*\bb\.", clause, re.I):
                 conflicts.append(clause)
             m = EVENT_PREFIX.match(clause)
             if not m:
-                # may still contain a date after "d " etc already missed
                 notes.append(clause)
                 continue
             raw_kind = m.group("kind").lower().rstrip(".")
+            raw_kind = re.sub(r"\d$", "", raw_kind)
+            typ = kind_map.get(raw_kind, "Event")
             rest = clause[m.end():].strip(" ,;.-")
-            typ = kind_map.get(raw_kind) or kind_map.get(raw_kind.rstrip("."))
-            if typ is None:
-                # "b" only
-                typ = {"b": "Birth", "d": "Death", "m": "Marriage"}.get(raw_kind[:1], "Event")
-            # Split date-ish head from place / comment
-            date = parse_date_fragment(rest)
-            place = None
-            extra = ""
-            if date:
-                # try to peel place after the year
-                year = str(date["year"])
-                idx = rest.find(year)
-                after = rest[idx + len(year):].strip(" ,;:-")
-                after = re.sub(r"^\((estimated|abt\.?|about|circa)\)\s*", "", after, flags=re.I)
-                # drop a leading punct
-                # place until '(' commentary
-                place_part, _, comment = after.partition("(")
-                place_part = place_part.strip(" ,;:-")
-                # marriage "Judy 1 Jan 1983, Massachusetts" — spouse name before date
-                if typ == "Marriage":
-                    before = rest[: rest.find(year) if year in rest else 0]
-                    # spouse words before the date token
-                    spouse_m = re.match(r"^([A-Z][A-Za-zÉéÈèÊêËëÎîÏïÔôŒœÜü .\"“”'\-]{1,40})\s+\d", rest)
-                    if spouse_m and not EVENT_PREFIX.match(spouse_m.group(1)):
-                        extra = "Spouse mentioned: " + spouse_m.group(1).strip()
-                if place_part and not re.match(r"^(aged|age|prob|possible|needs)", place_part, re.I):
-                    place = place_part
-                if comment:
-                    notes.append(comment.rstrip(")"))
-            else:
-                # no year; maybe a place only or a name ("m. Hélène 18 Aug 1862" if year parse failed)
-                date = parse_date_fragment(clause)
-                place = rest if not date else None
-                if typ == "Marriage" and rest:
-                    extra = rest
-            ev = {
+            date, place, extra = _split_date_place(rest, typ)
+            if raw_kind == "baptized" and date is None:
+                place = None  # "baptized Johan Jacob": the baptismal name, not a place
+            events.append({
                 "type": typ,
                 "date": date,
                 "place_text": place or "",
                 "description": extra,
                 "raw": clause,
-            }
-            events.append(ev)
+            })
 
     return {
         "events": events,
@@ -342,8 +414,9 @@ def normalize_place_parts(text: str) -> list[tuple[str, str]]:
     t = text.strip()
     t = t.replace(";", ",").replace("—", ",").replace("–", "-")
     t = re.sub(r"\s+", " ", t)
-    # strip trailing commentary
-    t = re.sub(r"\s*\(.*\)$", "", t).strip(" ,")
+    # strip commentary, ages and descriptors (root cause 3)
+    cleaned, _ = clean_place_text(t)
+    t = (cleaned or "").strip(" ,")
     if not t:
         return []
 
