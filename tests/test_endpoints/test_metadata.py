@@ -22,7 +22,13 @@
 import unittest
 
 from gramps_webapi.api.resources.metadata import _parse_rate_limit
-from gramps_webapi.auth.const import ROLE_ADMIN, ROLE_EDITOR, ROLE_GUEST, ROLE_OWNER
+from gramps_webapi.auth.const import (
+    ROLE_ADMIN,
+    ROLE_EDITOR,
+    ROLE_GUEST,
+    ROLE_MEMBER,
+    ROLE_OWNER,
+)
 
 from . import BASE_URL, get_single_tree_test_client, get_test_client
 from .checks import check_conforms_to_openapi_schema, check_requires_token
@@ -103,6 +109,28 @@ class TestMetadata(unittest.TestCase):
         self.assertIn("max_thumbnail_file_bytes", rv.json["server"])
         # deprecations remain restricted to users allowed to view settings
         self.assertNotIn("deprecations", rv.json)
+
+
+    def test_get_metadata_guest_home_person(self):
+        """Collins fork: GUEST_HOME_PERSON is returned to the Guest role only."""
+        config = self.client.application.config
+        header = fetch_header(self.client, role=ROLE_GUEST)
+        rv = self.client.get(TEST_URL, headers=header)
+        self.assertNotIn("guest_home_person", rv.json)  # off by default
+        config["GUEST_HOME_PERSON"] = " I0044 "
+        try:
+            rv = self.client.get(TEST_URL, headers=header)
+            self.assertEqual(rv.status_code, 200)
+            self.assertEqual(rv.json["guest_home_person"], "I0044")
+            for role in (ROLE_MEMBER, ROLE_EDITOR, ROLE_OWNER, ROLE_ADMIN):
+                rv = self.client.get(
+                    TEST_URL, headers=fetch_header(self.client, role=role)
+                )
+                self.assertEqual(rv.status_code, 200)
+                self.assertNotIn("guest_home_person", rv.json, role)
+        finally:
+            config["GUEST_HOME_PERSON"] = ""
+        check_conforms_to_openapi_schema(self, TEST_URL, "Metadata")
 
 
 class TestMetadataServer(unittest.TestCase):
