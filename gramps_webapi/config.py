@@ -111,6 +111,10 @@ class DefaultConfig(object):
     # Collins family fork: users who may not view private records see
     # private living people by their first name only (api/access/living.py)
     LIVING_FIRST_NAME_ONLY = False
+    # Collins family fork: Gramps ID of the home person forced on users with
+    # the Guest role (returned to them as guest_home_person by /api/metadata/;
+    # the frontend uses it and hides "Set Home Person"). Empty = off.
+    GUEST_HOME_PERSON = ""
     SENTRY_DSN = ""
     SENTRY_ENVIRONMENT = ""
     SENTRY_TRACES_SAMPLE_RATE = 0.0

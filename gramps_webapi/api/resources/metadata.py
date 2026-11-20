@@ -40,8 +40,13 @@ from webargs import fields
 
 from gramps_webapi.const import TREE_MULTI, VERSION
 
-from ...auth import config_get_all
-from ...auth.const import PERM_EDIT_TREE, PERM_VIEW_PRIVATE, PERM_VIEW_SETTINGS
+from ...auth import config_get_all, get_role
+from ...auth.const import (
+    PERM_EDIT_TREE,
+    PERM_VIEW_PRIVATE,
+    PERM_VIEW_SETTINGS,
+    ROLE_GUEST,
+)
 from ...dbmanager import WebDbManager
 from ..auth import has_permissions, require_permissions
 from ..backup_store import backups_enabled
@@ -151,6 +156,22 @@ class ResearcherUpdateSchema(Schema):
     postal = fields.Str(metadata={"description": "Postal code."})
     state = fields.Str(metadata={"description": "State."})
     street = fields.Str(metadata={"description": "Street address."})
+
+
+def _guest_home_person() -> str | None:
+    """Collins family fork: the configured home person (GUEST_HOME_PERSON)
+    if the current user has the Guest role, else None."""
+    gramps_id = (current_app.config.get("GUEST_HOME_PERSON") or "").strip()
+    if not gramps_id:
+        return None
+    user_id = get_jwt_identity()
+    if not user_id:
+        return None
+    try:
+        role = get_role(user_id)
+    except ValueError:
+        return None
+    return gramps_id if role == ROLE_GUEST else None
 
 
 def get_dbid_from_tree_id(tree_id: str) -> str:
@@ -326,6 +347,9 @@ class MetadataResource(ProtectedResource, GrampsJSONEncoder):
                 "building": building,
             },
         }
+        guest_home = _guest_home_person()
+        if guest_home:
+            result["guest_home_person"] = guest_home
         if args["surnames"]:
             result["surnames"] = db_handle.get_surname_list()
         data = db_handle.get_summary()

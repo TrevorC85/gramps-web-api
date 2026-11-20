@@ -2630,6 +2630,15 @@ class MetadataSchema(MetadataServerSchema):
             "description": "All surnames found in the database (when requested)."
         },
     )
+    guest_home_person = fields.Str(
+        metadata={
+            "description": (
+                "Collins family fork: Gramps ID of the home person forced for "
+                "users with the Guest role (GUEST_HOME_PERSON); only present "
+                "for them."
+            )
+        },
+    )
 
 
 class BookmarksSchema(_Base):

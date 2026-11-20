@@ -40,6 +40,10 @@ x-grampsweb: &grampsweb
     # search them by that name (both grampsweb and celery, via this anchor). Ignored by
     # the official image (rollback): living people are then hidden completely.
     GRAMPSWEB_LIVING_FIRST_NAME_ONLY: "True"
+    # Collins fork: home person of users with the Guest role (the shared "guest" account):
+    # James, I0016. They cannot change it; other roles keep their own home person.
+    # Software/config only: nothing is stored in the database or in user settings.
+    GRAMPSWEB_GUEST_HOME_PERSON: "I0016"
     GUNICORN_NUM_WORKERS: "3"
     GUNICORN_TIMEOUT: "300"
   volumes:
