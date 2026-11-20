@@ -223,7 +223,7 @@ scripts; keep `GrampsWebImage` empty there (see README, "Rebuilt server").
   the new image with `GRAMPSWEB_GUEST_HOME_PERSON=I0016`, `GRAMPSWEB_LIVING_FIRST_NAME_ONLY=True`;
   no errors in the log. 12:41 port 22 back to `lightsail-connect` only, SSH key files deleted,
   0 bucket keys; site 200, API 401.
-- 12:42-12:55 checks: Germany dot 19 events for owner and guest; guest 692 vs owner 702 events,
+- 12:42-12:48 checks: Germany dot 19 events for owner and guest; guest 692 vs owner 702 events,
   the 10 hidden all privacy-related; leak scan 0 problems; `guest_home_person` I0016 for guest
   only. Playwright desktop and phone as guest and trevor: regular map (Europe, North America,
   Germany popup, zoom), OHM labels, Show ancestors I0016 over Germany (19, Generation 6), 0 page
