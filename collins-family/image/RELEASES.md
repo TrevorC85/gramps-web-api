@@ -1,5 +1,31 @@
 # Releases of our image
 
+## 26.11.2-518761c-0698365 (map: dots sized by the number of events, with counts)
+
+| | |
+|---|---|
+| Tag | `grampsweb-collins:26.11.2-518761c-0698365` |
+| Image ID (config digest, what `switch-image.sh use` needs) | `sha256:2939d202ef9d2ca6febba6f33de0974c107bcba8d61d704b5c4862d11bfa0f1f` |
+| Size | 1,281,282,929 bytes unpacked |
+| Tarball | `grampsweb-collins-26.11.2-518761c-0698365.tgz`, 517,959,037 bytes (`docker save \| gzip -1`) |
+| Tarball sha256 | `01e2398d07b760c5194ac612ec8412d44e3ca03146f6aa6ba0f537ba81dc7ec0` |
+| API fork commit | `518761ca1e4696bad62831558c22b90e46cb5973` (unchanged; TrevorC85/gramps-web-api, branch collins-family) |
+| Frontend commit | `0698365608dee3c960b813da1eae7c4fc16b875a` (TrevorC85/gramps-web, branch collins-family) |
+| Gramps addons | `5c0f1a7b4bf9aa91d71cd19be21e07496924822c` |
+| Config | unchanged (`GRAMPSWEB_GUEST_HOME_PERSON: "I0016"`, `GRAMPSWEB_LIVING_FIRST_NAME_ONLY: "True"`) |
+| Deployed | 2026-11-20 12:40 CST to collinsfamilytree.net, scripts at API fork commit `518761ca1e4696bad62831558c22b90e46cb5973` |
+| Bucket object | `s3://<BackupBucketName>/images/grampsweb-collins-26.11.2-518761c-0698365.tgz` |
+
+What it does (frontend only): one dot per place whose radius grows with the square root of the
+number of events there that match the active filters (9 px for 0-1 events, 26 px at 100+); from
+two events the count is drawn in white with a font of the map style itself (Noto Sans Bold on
+the base maps, OpenHistorical Bold on the historical map; no counts if a style has no glyphs).
+Larger dots are drawn under smaller ones so small dots stay clickable. Tapping a dot opens a
+popup listing who had which event there and when: on the regular map loaded from
+`/api/events/` for the signed-in user (so guests only see and count what the API shows guests),
+with a "Show place" button for the old place card; in Show ancestors grouped by generation. The
+list scrolls inside the popup and the map pans so the popup is not under the search panel.
+
 ## 26.11.2-518761c-6ae7bc0 (map: "Show ancestors" of the selected person)
 
 | | |

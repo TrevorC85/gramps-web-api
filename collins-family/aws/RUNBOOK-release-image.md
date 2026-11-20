@@ -210,3 +210,21 @@ scripts; keep `GrampsWebImage` empty there (see README, "Rebuilt server").
   guest and trevor from I0016, I0001, I0006: switch, All/3 generations, legend, popups, 0 page
   errors. James (I0016), All: 958 ancestors, 256 places on the map (guest 255), 19 places without
   coordinates.
+
+## Log of the release on 2026-11-20, 26.11.2-518761c-0698365 (map dot sizes; times CST)
+
+- 12:26 state check: live healthy on 26.11.2-518761c-6ae7bc0, 0 bucket keys, port 22
+  `lightsail-connect` only. API unchanged (image backend and server scripts stay at `518761c`).
+- 12:36 frontend pushed 6ae7bc0..0698365 (no force). 12:36-12:37 image uploaded with a temporary
+  bucket key (517,959,037 bytes, sha256 01e2398d…); key deleted, 0 keys left.
+- 12:37 port 22 opened to the PC's /32; 12:38 fresh backup (sha256 c115198b…), checkout of
+  `518761c`; backup copied to the PC as `pre-release-latest-2026-11-20-dotsize.tgz` (sha OK).
+- 12:39-12:40 `use`: backup, restart, health OK (container started 12:40:30), both containers on
+  the new image with `GRAMPSWEB_GUEST_HOME_PERSON=I0016`, `GRAMPSWEB_LIVING_FIRST_NAME_ONLY=True`;
+  no errors in the log. 12:41 port 22 back to `lightsail-connect` only, SSH key files deleted,
+  0 bucket keys; site 200, API 401.
+- 12:42-12:55 checks: Germany dot 19 events for owner and guest; guest 692 vs owner 702 events,
+  the 10 hidden all privacy-related; leak scan 0 problems; `guest_home_person` I0016 for guest
+  only. Playwright desktop and phone as guest and trevor: regular map (Europe, North America,
+  Germany popup, zoom), OHM labels, Show ancestors I0016 over Germany (19, Generation 6), 0 page
+  errors.
