@@ -4,7 +4,8 @@ For `https://collinsfamilytree.net` (stack `collins-family-gramps`, instance
 `collins-family-gramps-1`, bucket `collins-family-gramps-491141537355-backup`, us-west-2).
 Release record: `../image/RELEASES.md`. Run from FROG-PC PowerShell with profile `collins`.
 Downtime: the backup (seconds) and one restart (~30-60 s). Nothing is deleted on the server.
-Done once on 2026-11-19 (10:50-10:52 CST); see the log at the end.
+Done three times on 2026-11-19 (10:50, 13:32 and 19:16 CST); see the logs at the end. For a new
+release, put its tag, image ID, tarball and sha256 from RELEASES.md in step 0 and step 4.
 
 ## 0. Session
 
@@ -161,3 +162,31 @@ scripts; keep `GrampsWebImage` empty there (see README, "Rebuilt server").
   none of the 12 private people or 3 private families in any API response, private person page
   "Not Found". Temporary account deleted.
 - 10:57 port 22 back to `lightsail-connect` only, SSH key files deleted.
+
+## Log of the release on 2026-11-19, 26.11.2-5c640ab-0066f1c (guest first names; times CST)
+
+- 13:16 API and frontend commits pushed from FROG-PC (no force); scripts commit `7d37048`.
+- 13:28 image uploaded with a temporary bucket key (471,702,615 bytes); key deleted, 0 keys left.
+- 13:30 port 22 opened to the PC's /32; fresh backup, copied to the PC as
+  `pre-release-latest-2026-11-19-guestfn.tgz` (sha256 938ebf62…); checkout of `7d37048`,
+  `REPO_BRANCH` set, request cache cleared.
+- 13:32 `use`: backup, restart, health OK, both containers on the new image with
+  `GRAMPSWEB_LIVING_FIRST_NAME_ONLY=True`.
+- Checks: guest sees 1005 people incl. 12 first-name stubs, "Hidden" relation on the living
+  children's families, guest crawl with no code leaks; owner sees full data. Port 22 back to
+  `lightsail-connect` only, SSH key files deleted; `samconfig.toml` RepoBranch `7d37048`.
+
+## Log of the release on 2026-11-19, 26.11.2-ad586bb-1c78d2f (guest home person; times CST)
+
+- 19:10 session OK; latest backup 13:32 (taken by the previous switch; nightly runs at 03:30).
+- 19:11-19:12 image uploaded with a temporary bucket key (517,984,677 bytes); key deleted, 0 keys left.
+- 19:12 port 22 opened to the PC's /32; 19:13 fresh backup (sha256 7d8d5a93…); checkout of
+  `ad586bb`, `REPO_BRANCH` set. 19:14 backup copied to the PC as
+  `pre-release-latest-2026-11-19-guesthome.tgz` (first download was interrupted, redone, sha OK).
+- 19:15-19:16 `use`: backup, restart, health OK (container started 19:16:32), both containers on
+  the new image with `GRAMPSWEB_GUEST_HOME_PERSON=I0016` and `GRAMPSWEB_LIVING_FIRST_NAME_ONLY=True`.
+- 19:17 port 22 back to `lightsail-connect` only, SSH key files deleted, 0 bucket keys;
+  `samconfig.toml` RepoBranch `ad586bb`.
+- 19:18-19:25 checks: `/api/metadata/` gives `guest_home_person` I0016 to guest, none to owner;
+  guest dashboard, tree and home button on James (I0016), no Set Home Person, 0 page errors; owner
+  home unchanged and changeable; guest crawl 1025 people, the same 12 stubs, no code leaks.
