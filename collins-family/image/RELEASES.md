@@ -1,5 +1,32 @@
 # Releases of our image
 
+## 26.11.2-518761c-6ae7bc0 (map: "Show ancestors" of the selected person)
+
+| | |
+|---|---|
+| Tag | `grampsweb-collins:26.11.2-518761c-6ae7bc0` |
+| Image ID (config digest, what `switch-image.sh use` needs) | `sha256:0011e96cc892d14f81ddd8352ac11a0b54fa8bab81f1648f17e67b830261a704` |
+| Size | 1,281,274,756 bytes unpacked |
+| Tarball | `grampsweb-collins-26.11.2-518761c-6ae7bc0.tgz`, 517,983,775 bytes (`docker save \| gzip -1`) |
+| Tarball sha256 | `ca88bd7b0c241410c74230b425e0174f144b7345119ca1a195ec27365c1c2782` |
+| API fork commit | `518761ca1e4696bad62831558c22b90e46cb5973` (TrevorC85/gramps-web-api, branch collins-family) |
+| Frontend commit | `6ae7bc07645ba6b4fac7e96af57cf9c66debda3b` (TrevorC85/gramps-web, branch collins-family) |
+| Gramps addons | `5c0f1a7b4bf9aa91d71cd19be21e07496924822c` |
+| Config | unchanged (`GRAMPSWEB_GUEST_HOME_PERSON: "I0016"`, `GRAMPSWEB_LIVING_FIRST_NAME_ONLY: "True"`) |
+| Deployed | 2026-11-20 10:18 CST to collinsfamilytree.net, scripts at API fork commit `518761ca1e4696bad62831558c22b90e46cb5973` |
+| Bucket object | `s3://<BackupBucketName>/images/grampsweb-collins-26.11.2-518761c-6ae7bc0.tgz` |
+
+What it does: new read-only endpoint `GET /api/people/<handle>/ancestor-places?generations=N`
+(N = 0..30, default 30 = all) walks the parent families (two per person, loops and repeats
+counted once at the nearest generation) and returns each ancestor event's place, coordinates,
+type, year, people and generation, plus counts of ancestors, events without a place and places
+without coordinates. It reads through the same restricted database as the rest of the API:
+private people/events/places are left out, and for guests living people are first-name stubs
+without events. On the map, the selected-person card has a "Show ancestors" switch with a
+generations picker (2, 3, 5, 10, All); pins are coloured by generation with a legend, popups list
+the people and events per place, the map fits to the pins (folding the card on phones), and the
+year and event-type filters still apply. No data is changed.
+
 ## 26.11.2-ad586bb-1c78d2f (guest home person: guests always start at James, I0016)
 
 | | |

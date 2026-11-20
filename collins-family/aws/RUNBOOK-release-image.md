@@ -190,3 +190,23 @@ scripts; keep `GrampsWebImage` empty there (see README, "Rebuilt server").
 - 19:18-19:25 checks: `/api/metadata/` gives `guest_home_person` I0016 to guest, none to owner;
   guest dashboard, tree and home button on James (I0016), no Set Home Person, 0 page errors; owner
   home unchanged and changeable; guest crawl 1025 people, the same 12 stubs, no code leaks.
+
+## Log of the release on 2026-11-20, 26.11.2-518761c-6ae7bc0 (map ancestors; times CST)
+
+- 10:10 session renewed (`aws login`); nightly backup written 03:45 (OK); 0 bucket keys, port 22
+  `lightsail-connect` only; site 200, API 401. Frontend pushed f89b80b..6ae7bc0 (no force); API
+  518761c was already on origin.
+- 10:11 tarball assembled on the PC, sha256 OK. 10:14-10:15 uploaded with a temporary bucket key
+  (517,983,775 bytes); key deleted, 0 keys left.
+- 10:15 port 22 opened to the PC's /32; 10:16 fresh backup (sha256 49fb137a…), checkout of
+  `518761c`, `REPO_BRANCH` set; backup copied to the PC as
+  `pre-release-latest-2026-11-20-ancestors.tgz` (sha OK).
+- 10:17-10:19 `use`: backup, restart, health OK (container started 10:18:54), both containers on
+  the new image with `GRAMPSWEB_GUEST_HOME_PERSON=I0016`, `GRAMPSWEB_LIVING_FIRST_NAME_ONLY=True`;
+  no errors in the log. 10:19 port 22 back to `lightsail-connect` only, SSH key files deleted,
+  0 bucket keys.
+- 10:20-10:28 checks: `/api/people/x/ancestor-places` 401 without login; guest leak scan of the
+  new endpoint (17 roots, 13 private living people) 0 problems; Playwright desktop and phone as
+  guest and trevor from I0016, I0001, I0006: switch, All/3 generations, legend, popups, 0 page
+  errors. James (I0016), All: 958 ancestors, 256 places on the map (guest 255), 19 places without
+  coordinates.
