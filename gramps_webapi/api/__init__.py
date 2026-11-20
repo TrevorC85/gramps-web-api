@@ -79,6 +79,7 @@ from .resources.importers import (
     ImportersResource,
     RestoreFileResource,
 )
+from .resources.ancestor_places import PersonAncestorPlacesResource
 from .resources.link_confidence import ChildRefConfidenceResource
 from .resources.living import LivingDatesResource, LivingResource
 from .resources.media import MediaObjectResource, MediaObjectsResource
@@ -352,6 +353,12 @@ register_endpt(
     tags=["People"],
     request_body=object_request_body("Person"),
     object_name="Person",
+)
+register_endpt(
+    PersonAncestorPlacesResource,
+    "/people/<string:handle>/ancestor-places",
+    "person-ancestor-places",
+    tags=["People"],
 )
 register_endpt(
     PersonDnaMatchesResource,
