@@ -10,6 +10,17 @@
 	@www host www.{$DOMAIN_NAME}
 	redir @www https://{$DOMAIN_NAME}{uri} permanent
 
+	# Access log in JSON under /data (host /srv/gramps/caddy/data) so it survives restarts;
+	# rolled at 10 MiB, 5 old files kept, none older than 90 days.
+	log {
+		output file /data/access.log {
+			roll_size 10MiB
+			roll_keep 5
+			roll_keep_for 2160h
+		}
+		format json
+	}
+
 	encode zstd gzip
 	header {
 		Strict-Transport-Security "max-age=31536000"
