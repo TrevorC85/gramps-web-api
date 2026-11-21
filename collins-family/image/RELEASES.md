@@ -1,5 +1,15 @@
 # Releases of our image
 
+## Config-only change 2026-11-21: Caddy access log (no image change)
+
+The image stays `grampsweb-collins:26.11.2-518761c-0698365`; only `collins-family/aws/Caddyfile`
+changed (API fork commit `c38c799b837e6deb9289af0dc65bddfe6043790e`, server scripts and
+`REPO_BRANCH` now at that commit). Caddy writes a JSON access log to `/data/access.log` in the
+container, `/srv/gramps/caddy/data/access.log` on the host (survives restarts): rolled at 10 MiB,
+5 old files kept, none older than 90 days (`roll_keep_for 2160h`). Caddy leaves out cookie and
+authorization headers by default. Applied 2026-11-21 08:02 CST with `caddy reload` (no
+container restart); the old file is `collins-family/aws/Caddyfile.bak-2026-11-20` on the server.
+
 ## 26.11.2-518761c-0698365 (map: dots sized by the number of events, with counts)
 
 | | |

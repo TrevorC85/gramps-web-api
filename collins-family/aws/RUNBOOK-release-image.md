@@ -228,3 +228,29 @@ scripts; keep `GrampsWebImage` empty there (see README, "Rebuilt server").
   only. Playwright desktop and phone as guest and trevor: regular map (Europe, North America,
   Germany popup, zoom), OHM labels, Show ancestors I0016 over Germany (19, Generation 6), 0 page
   errors.
+
+## Log of the config change on 2026-11-21, Caddy access log (no image change; times CST)
+
+- 2026-11-20 23:13-23:16 `log` block added to `Caddyfile` (JSON to `/data/access.log`, roll
+  10 MiB, keep 5, 2160h); `caddy adapt`, `validate`, `fmt` with Caddy v2.11.9 OK; commit
+  `c38c799` pushed d1a1078..c38c799 (no force). The PC's AWS session had expired, so the server
+  part waited.
+- 08:00 done from the agent box with the Lightsail connector (IAM user
+  grokbot-collinsfamilytree) instead of the PC. Port states read first (80/tcp, 443/tcp,
+  443/udp open to all; 22 `lightsail-connect` only). Port 22 opened to one box address /32 plus
+  `lightsail-connect`; temporary SSH certificate from `GetInstanceAccessDetails` (valid
+  13 minutes). The box's outbound address rotates per connection, so one SSH ControlMaster
+  connection carried all commands.
+- 08:02 on the server: `Caddyfile.bak-2026-11-20` saved; c38c799 fetched; new file checked with
+  the server's Caddy image (`caddy adapt`); written in place (`cat new > Caddyfile`, same inode,
+  so the single-file bind mount sees it), `git add` then `checkout --detach` c38c799 (inode
+  kept, tree clean), `REPO_BRANCH` set to c38c799. Container and host file identical;
+  `caddy reload` OK. Caddy not restarted (still started 2026-11-20 12:40), images unchanged
+  (grampsweb on `26.11.2-518761c-0698365`).
+- 08:02 checks: site 200 from inside and outside, certificate valid to 2027-02-16, API 401;
+  `/srv/gramps/caddy/data/access.log` (root, 0600) grew 3 -> 6 lines with test requests, entries
+  JSON (`http.log.access.log0`, no cookie or authorization headers).
+- 08:03 ports put back exactly (`PutInstancePublicPorts`: 80/tcp, 443/tcp, 443/udp open to all;
+  22 `lightsail-connect` only), checked with `GetInstancePortStates`; port 22 unreachable from
+  the box; temporary key, certificate and host-key files deleted on the box. No bucket key, no
+  extra backup (the nightly backup ran 03:44).
